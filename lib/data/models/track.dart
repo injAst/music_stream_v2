@@ -6,6 +6,7 @@ class Track {
     required this.streamUrl,
     this.artworkUrl,
     this.durationSeconds,
+    this.canDelete = false,
   });
 
   final String id;
@@ -14,6 +15,7 @@ class Track {
   final String streamUrl;
   final String? artworkUrl;
   final int? durationSeconds;
+  final bool canDelete;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -22,6 +24,7 @@ class Track {
         'streamUrl': streamUrl,
         'artworkUrl': artworkUrl,
         'durationSeconds': durationSeconds,
+        'canDelete': canDelete,
       };
 
   static Track fromJson(Map<String, dynamic> json) {
@@ -29,9 +32,10 @@ class Track {
       id: json['id'] as String,
       title: json['title'] as String,
       artist: json['artist'] as String,
-      streamUrl: json['streamUrl'] as String,
-      artworkUrl: json['artworkUrl'] as String?,
-      durationSeconds: json['durationSeconds'] as int?,
+      streamUrl: (json['streamUrl'] ?? json['stream_url']) as String,
+      artworkUrl: (json['artworkUrl'] ?? json['artwork_url']) as String?,
+      durationSeconds: (json['durationSeconds'] ?? json['duration_seconds']) as int?,
+      canDelete: (json['canDelete'] ?? json['can_delete']) as bool? ?? false,
     );
   }
 }
