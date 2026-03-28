@@ -64,4 +64,20 @@ class TrackRepository {
     );
     _handleError(res);
   }
+
+  Future<void> likeTrack(String id) async {
+    final res = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/tracks/$id/like'),
+      headers: _headers(),
+    );
+    _handleError(res);
+  }
+
+  Future<void> unlikeTrack(String id) async {
+    final res = await http.delete(
+      Uri.parse('${ApiConfig.baseUrl}/tracks/$id/like'),
+      headers: _headers(),
+    );
+    _handleError(res);
+  }
 }

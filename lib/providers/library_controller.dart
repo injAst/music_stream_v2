@@ -44,4 +44,31 @@ class LibraryController extends ChangeNotifier {
     await _repo.removeTrack(id);
     await load();
   }
+
+  Future<void> toggleLike(String id) async {
+    final idx = _tracks.indexWhere((t) => t.id == id);
+    if (idx == -1) return;
+
+    final track = _tracks[idx];
+    final isLiking = !track.isLiked;
+
+    // Оптимистичное обновление
+    _tracks[idx] = track.copyWith(
+      isLiked: isLiking,
+      likesCount: track.likesCount + (isLiking ? 1 : -1),
+    );
+    notifyListeners();
+
+    try {
+      if (isLiking) {
+        await _repo.likeTrack(id);
+      } else {
+        await _repo.unlikeTrack(id);
+      }
+    } catch (e) {
+      // Откат при ошибке
+      _tracks[idx] = track;
+      notifyListeners();
+    }
+  }
 }

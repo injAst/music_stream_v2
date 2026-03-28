@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../providers/audio_player_controller.dart';
+import '../../providers/library_controller.dart';
 import '../widgets/track_artwork.dart';
 
 Future<void> showFullPlayerSheet(BuildContext context) {
@@ -24,7 +25,13 @@ class _FullPlayerBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AudioPlayerController>(
       builder: (context, audio, _) {
-        final track = audio.currentTrack;
+        final playingTrackId = audio.currentTrack?.id;
+        final library = context.watch<LibraryController>();
+        final track = library.tracks.cast<dynamic>().firstWhere(
+          (t) => t.id == playingTrackId,
+          orElse: () => audio.currentTrack,
+        );
+
         if (track == null) {
           Navigator.of(context).pop();
           return const SizedBox.shrink();
@@ -71,7 +78,23 @@ class _FullPlayerBody extends StatelessWidget {
                   fontSize: 16,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: Icon(track.isLiked ? Icons.favorite : Icons.favorite_border),
+                    color: track.isLiked ? Colors.redAccent : AppTheme.textSecondary,
+                    onPressed: () => context.read<LibraryController>().toggleLike(track.id),
+                  ),
+                  if (track.likesCount > 0)
+                    Text(
+                      '${track.likesCount}',
+                      style: const TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   trackHeight: 4,

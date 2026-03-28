@@ -239,13 +239,20 @@ Handler _buildApp({required Connection conn, required String jwtSecret}) {
             t.stream_url,
             t.artwork_url,
             t.duration_seconds,
+            COUNT(l.user_id) AS likes_count,
+            CASE
+              WHEN @uidStr != '' AND MAX(CASE WHEN l.user_id::text = @uidStr THEN 1 ELSE 0 END) = 1
+              THEN true ELSE false
+            END AS is_liked,
             CASE
               WHEN @uidStr != '' AND t.owner_id IS NOT NULL AND t.owner_id::text = @uidStr
               THEN true ELSE false
             END AS can_delete
           FROM tracks t
+          LEFT JOIN track_likes l ON t.id = l.track_id
           WHERE t.is_public = TRUE
              OR (@uidStr != '' AND t.owner_id IS NOT NULL AND t.owner_id::text = @uidStr)
+          GROUP BY t.id
           ORDER BY t.title
           ''',
         ),
@@ -260,6 +267,8 @@ Handler _buildApp({required Connection conn, required String jwtSecret}) {
           'stream_url': m['stream_url'],
           'artwork_url': m['artwork_url'],
           'duration_seconds': m['duration_seconds'],
+          'likes_count': int.tryParse(m['likes_count']?.toString() ?? '0') ?? 0,
+          'is_liked': m['is_liked'] == true,
           'can_delete': m['can_delete'] == true,
         };
       }).toList();
@@ -310,6 +319,8 @@ Handler _buildApp({required Connection conn, required String jwtSecret}) {
             'stream_url': m['stream_url'],
             'artwork_url': m['artwork_url'],
             'duration_seconds': m['duration_seconds'],
+            'likes_count': 0,
+            'is_liked': false,
             'can_delete': true,
           },
         },
@@ -337,6 +348,34 @@ Handler _buildApp({required Connection conn, required String jwtSecret}) {
       if (rs.isEmpty) {
         return jsonRes({'error': 'Трек не найден или нет прав'}, status: 404);
       }
+      return jsonRes({'ok': true});
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  router.post('/v1/tracks/<id>/like', (Request req, String id) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Нужна авторизация'}, status: 401);
+    try {
+      await conn.execute(
+        Sql.named('INSERT INTO track_likes (user_id, track_id) VALUES (@uid::uuid, @tid::uuid) ON CONFLICT DO NOTHING'),
+        parameters: {'uid': uid, 'tid': id},
+      );
+      return jsonRes({'ok': true});
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  router.delete('/v1/tracks/<id>/like', (Request req, String id) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Нужна авторизация'}, status: 401);
+    try {
+      await conn.execute(
+        Sql.named('DELETE FROM track_likes WHERE user_id = @uid::uuid AND track_id = @tid::uuid'),
+        parameters: {'uid': uid, 'tid': id},
+      );
       return jsonRes({'ok': true});
     } catch (e) {
       return jsonRes({'error': e.toString()}, status: 500);
