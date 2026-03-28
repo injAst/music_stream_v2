@@ -6,11 +6,11 @@ abstract final class AppTheme {
   static const Color background = Color(0xFF121212);
   static const Color surface = Color(0xFF181818);
   static const Color surfaceHighlight = Color(0xFF282828);
-  static const Color accent = Color(0xFF1DB954);
-  static const Color accentDim = Color(0xFF1ED760);
-  static const Color onAccent = Color(0xFF000000);
+  static const Color accent = Color(0xFFF0E932); // Yandex yellow
+  static const Color accentDim = Color(0xFFE5DE25);
+  static const Color onAccent = Color(0xFF000000); // Black text on yellow button
   static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFB3B3B3);
+  static const Color textSecondary = Color(0xFF8B8B8B);
 
   static ThemeData dark() {
     final base = ThemeData(
@@ -68,7 +68,7 @@ abstract final class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
-          side: const BorderSide(color: textSecondary),
+          side: const BorderSide(color: Color(0xFF404040)),
           minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(999),
