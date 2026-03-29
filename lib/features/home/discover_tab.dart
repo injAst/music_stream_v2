@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../data/models/track.dart';
 import '../../data/models/user_profile.dart';
 import '../../data/repositories/user_repository.dart';
+import '../../data/repositories/track_repository.dart';
 import '../../providers/audio_player_controller.dart';
 import '../../providers/library_controller.dart';
 import '../widgets/track_artwork.dart';
@@ -48,8 +49,8 @@ class DiscoverTab extends StatelessWidget {
                 ],
               ),
 
-              // Поиск пользователей
-              const SliverToBoxAdapter(child: _UserSearchSection()),
+              // Поиск пользователей и треков
+              const SliverToBoxAdapter(child: _GlobalSearchSection()),
 
               SliverToBoxAdapter(
                 child: Padding(
@@ -391,17 +392,20 @@ class _VerticalTrackTile extends StatelessWidget {
 
 // ─── Поиск пользователей ────────────────────────────────────────────────────
 
-class _UserSearchSection extends StatefulWidget {
-  const _UserSearchSection();
+// ─── Глобальный поиск (Пользователи + Треки) ────────────────────────────────
+
+class _GlobalSearchSection extends StatefulWidget {
+  const _GlobalSearchSection();
 
   @override
-  State<_UserSearchSection> createState() => _UserSearchSectionState();
+  State<_GlobalSearchSection> createState() => _GlobalSearchSectionState();
 }
 
-class _UserSearchSectionState extends State<_UserSearchSection> {
+class _GlobalSearchSectionState extends State<_GlobalSearchSection> {
   final _controller = TextEditingController();
   Timer? _debounce;
-  List<UserProfile> _results = [];
+  List<UserProfile> _userResults = [];
+  List<Track> _trackResults = [];
   bool _searching = false;
   bool _active = false; // виден ли блок результатов
 
@@ -415,20 +419,42 @@ class _UserSearchSectionState extends State<_UserSearchSection> {
   void _onChanged(String value) {
     _debounce?.cancel();
     if (value.trim().isEmpty) {
-      setState(() { _results = []; _active = false; _searching = false; });
+      setState(() {
+        _userResults = [];
+        _trackResults = [];
+        _active = false;
+        _searching = false;
+      });
       return;
     }
-    setState(() { _active = true; _searching = true; });
+    setState(() {
+      _active = true;
+      _searching = true;
+    });
     _debounce = Timer(const Duration(milliseconds: 450), () async {
       try {
         final prefs = await SharedPreferences.getInstance();
-        final repo = UserRepository(prefs);
-        final found = await repo.searchUsers(value.trim());
+        final userRepo = UserRepository(prefs);
+        final trackRepo = TrackRepository(prefs);
+
+        final query = value.trim();
+        // Запускаем поиск людей и треков параллельно
+        final results = await Future.wait([
+          userRepo.searchUsers(query),
+          trackRepo.searchTracks(query),
+        ]);
+
         if (!mounted) return;
-        setState(() { _results = found; _searching = false; });
+        setState(() {
+          _userResults = results[0] as List<UserProfile>;
+          _trackResults = results[1] as List<Track>;
+          _searching = false;
+        });
       } catch (_) {
         if (!mounted) return;
-        setState(() { _searching = false; });
+        setState(() {
+          _searching = false;
+        });
       }
     });
   }
@@ -445,16 +471,16 @@ class _UserSearchSectionState extends State<_UserSearchSection> {
             controller: _controller,
             onChanged: _onChanged,
             decoration: InputDecoration(
-              hintText: 'Найти пользователя...',
-              prefixIcon: const Icon(Icons.person_search_rounded,
-                  color: AppTheme.textSecondary),
+              hintText: 'Найти музыку или друзей...',
+              prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textSecondary),
               suffixIcon: _active
                   ? IconButton(
                       icon: const Icon(Icons.close, color: AppTheme.textSecondary),
                       onPressed: () {
                         _controller.clear();
                         setState(() {
-                          _results = [];
+                          _userResults = [];
+                          _trackResults = [];
                           _active = false;
                           _searching = false;
                         });
@@ -482,65 +508,108 @@ class _UserSearchSectionState extends State<_UserSearchSection> {
           // Результаты поиска
           if (_active) ...[
             const SizedBox(height: 8),
-            if (_searching)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                        color: AppTheme.accent, strokeWidth: 2),
-                  ),
-                ),
-              )
-            else if (_results.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                child: Text('Пользователи не найдены',
-                    style: TextStyle(color: AppTheme.textSecondary)),
-              )
-            else
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  children: _results.map((user) {
-                    return ListTile(
-                      onTap: () {
-                        FocusScope.of(context).unfocus();
-                        context.push('/profile/${user.id}');
-                      },
-                      leading: CircleAvatar(
-                        radius: 22,
-                        backgroundColor: AppTheme.surfaceHighlight,
-                        backgroundImage:
-                            user.avatarUrl != null && user.avatarUrl!.isNotEmpty
-                                ? NetworkImage(user.avatarUrl!)
-                                : null,
-                        child: user.avatarUrl == null || user.avatarUrl!.isEmpty
-                            ? Text(
-                                user.displayName.isNotEmpty
-                                    ? user.displayName[0].toUpperCase()
-                                    : '?',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700, fontSize: 16),
-                              )
-                            : null,
-                      ),
-                      title: Text(user.displayName,
-                          style: const TextStyle(fontWeight: FontWeight.w600)),
-                      trailing: const Icon(Icons.chevron_right_rounded,
-                          color: AppTheme.textSecondary),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
-                    );
-                  }).toList(),
-                ),
+            Container(
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 5),
+                  )
+                ],
               ),
-            const SizedBox(height: 8),
+              child: _searching
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(
+                        child: CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2),
+                      ),
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Секция Треков
+                        if (_trackResults.isNotEmpty) ...[
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                            child: Text('ТРЕКИ',
+                                style: TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.2)),
+                          ),
+                          ..._trackResults.map((track) {
+                            return ListTile(
+                              onTap: () {
+                                FocusScope.of(context).unfocus();
+                                context.read<AudioPlayerController>().playTrack(track, playlist: _trackResults);
+                              },
+                              leading: TrackArtwork(url: track.artworkUrl, size: 40, radius: 4),
+                              title: Text(track.title,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: Text(track.artist,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                              trailing: const Icon(Icons.play_circle_outline, color: AppTheme.accent),
+                            );
+                          }),
+                        ],
+
+                        // Секция Людей
+                        if (_userResults.isNotEmpty) ...[
+                          if (_trackResults.isNotEmpty) const Divider(height: 1),
+                          const Padding(
+                            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                            child: Text('ЛЮДИ',
+                                style: TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.2)),
+                          ),
+                          ..._userResults.map((user) {
+                            return ListTile(
+                              onTap: () {
+                                FocusScope.of(context).unfocus();
+                                context.push('/profile/${user.id}');
+                              },
+                              leading: CircleAvatar(
+                                radius: 20,
+                                backgroundColor: AppTheme.surfaceHighlight,
+                                backgroundImage: user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                                    ? NetworkImage(user.avatarUrl!)
+                                    : null,
+                                child: user.avatarUrl == null || user.avatarUrl!.isEmpty
+                                    ? Text(
+                                        user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?',
+                                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                                      )
+                                    : null,
+                              ),
+                              title: Text(user.displayName,
+                                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                              trailing: const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary),
+                            );
+                          }),
+                        ],
+
+                        if (_trackResults.isEmpty && _userResults.isEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                            child: Center(
+                              child: Text('Ничего не найдено 😕',
+                                  style: TextStyle(color: AppTheme.textSecondary)),
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+            ),
+            const SizedBox(height: 16),
           ],
         ],
       ),

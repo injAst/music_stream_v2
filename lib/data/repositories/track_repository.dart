@@ -111,4 +111,16 @@ class TrackRepository {
     );
     _handleError(res);
   }
+
+  Future<List<Track>> searchTracks(String query) async {
+    if (query.trim().isEmpty) return [];
+    final res = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/tracks/search?q=${Uri.encodeQueryComponent(query.trim())}'),
+      headers: _headers(),
+    );
+    _handleError(res);
+    final data = jsonDecode(res.body);
+    final list = data['tracks'] as List;
+    return list.map((e) => Track.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+  }
 }

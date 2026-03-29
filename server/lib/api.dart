@@ -459,6 +459,53 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
     }
   });
 
+  router.get('/v1/tracks/search', (Request req) async {
+    final q = req.url.queryParameters['q']?.trim() ?? '';
+    final uid = userIdFromToken(req);
+    final uidStr = uid ?? '';
+    if (q.isEmpty) return jsonRes({'tracks': []});
+    try {
+      final rs = await conn.execute(
+        Sql.named(
+          '''
+          SELECT
+            t.id::text, t.title, t.artist, t.stream_url, t.artwork_url, t.duration_seconds,
+            COUNT(l.user_id) AS l_count,
+            CASE
+              WHEN @uidStr != '' AND MAX(CASE WHEN l.user_id::text = @uidStr THEN 1 ELSE 0 END) = 1
+              THEN true ELSE false
+            END AS is_l
+          FROM tracks t
+          LEFT JOIN track_likes l ON t.id = l.track_id
+          WHERE (t.title ILIKE @q OR t.artist ILIKE @q) AND t.is_public = TRUE
+          GROUP BY t.id
+          LIMIT 20
+          ''',
+        ),
+        parameters: {'q': '%$q%', 'uidStr': uidStr},
+      );
+      
+      final list = rs.map((row) {
+        return {
+          'id': row[0].toString(),
+          'title': row[1].toString(),
+          'artist': row[2].toString(),
+          'stream_url': row[3].toString(),
+          'artwork_url': row[4],
+          'duration_seconds': row[5],
+          'likes_count': int.tryParse(row[6]?.toString() ?? '0') ?? 0,
+          'is_liked': row[7] == true,
+          'can_delete': false,
+        };
+      }).toList();
+      
+      return jsonRes({'tracks': list});
+    } catch (e, st) {
+      print('TRACK SEARCH ERROR: $e\n$st');
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
   // Поиск пользователей по нику
   router.get('/v1/users/search', (Request req) async {
     final q = req.url.queryParameters['q']?.trim() ?? '';
