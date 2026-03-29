@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,7 +41,7 @@ class TrackRepository {
     return list.map((e) => Track.fromJson(Map<String, dynamic>.from(e as Map))).toList();
   }
 
-  Future<void> addTrack({
+  Future<Track> addTrack({
     required String title,
     required String artist,
     required String streamUrl,
@@ -55,6 +58,34 @@ class TrackRepository {
       }),
     );
     _handleError(res);
+    final data = jsonDecode(res.body);
+    return Track.fromJson(data['track']);
+  }
+
+  Future<String> uploadAudioFile({
+    File? file,
+    List<int>? bytes,
+    required String filename,
+  }) async {
+    final request = http.MultipartRequest('POST', Uri.parse('${ApiConfig.baseUrl}/upload'))
+      ..headers.addAll(_headers());
+      
+    if (kIsWeb && bytes != null) {
+      request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    } else if (!kIsWeb && file != null) {
+      request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: filename));
+    } else if (bytes != null) {
+      request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    } else {
+      throw Exception('Необходим либо файл, либо набор байтов для загрузки');
+    }
+
+    final streamedResponse = await request.send();
+    final res = await http.Response.fromStream(streamedResponse);
+    _handleError(res);
+
+    final data = jsonDecode(res.body);
+    return data['url'] as String;
   }
 
   Future<void> removeTrack(String id) async {

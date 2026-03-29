@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -35,6 +36,10 @@ class DiscoverTab extends StatelessWidget {
                   ),
                 ),
                 actions: [
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline, color: AppTheme.textSecondary),
+                    onPressed: () => context.push('/add-track'),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.settings_outlined, color: AppTheme.textSecondary),
                     onPressed: () {},

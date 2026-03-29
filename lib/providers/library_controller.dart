@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 
 import '../data/models/track.dart';
@@ -28,13 +30,30 @@ class LibraryController extends ChangeNotifier {
   Future<void> addTrack({
     required String title,
     required String artist,
-    required String streamUrl,
+    String? streamUrl,
+    File? audioFile,
+    List<int>? audioBytes,
+    String? audioFileName,
     String? artworkUrl,
   }) async {
+    String finalStreamUrl = streamUrl ?? '';
+    
+    if (audioFile != null || audioBytes != null) {
+      finalStreamUrl = await _repo.uploadAudioFile(
+        file: audioFile,
+        bytes: audioBytes,
+        filename: audioFileName ?? 'upload.mp3',
+      );
+    }
+    
+    if (finalStreamUrl.isEmpty) {
+      throw Exception('Необходимо указать ссылку или выбрать файл');
+    }
+
     await _repo.addTrack(
       title: title,
       artist: artist,
-      streamUrl: streamUrl,
+      streamUrl: finalStreamUrl,
       artworkUrl: artworkUrl,
     );
     await load();

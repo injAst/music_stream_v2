@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -18,6 +22,8 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
   final _url = TextEditingController();
   final _art = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  
+  PlatformFile? _selectedFile;
   bool _loading = false;
 
   @override
@@ -29,26 +35,65 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
     super.dispose();
   }
 
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
+      allowMultiple: false,
+      withData: true,
+    );
+
+    if (result != null && result.files.isNotEmpty) {
+      final file = result.files.single;
+      setState(() {
+        _selectedFile = file;
+        
+        if (_title.text.isEmpty) {
+           String name = file.name;
+           int dot = name.lastIndexOf('.');
+           _title.text = dot != -1 ? name.substring(0, dot) : name;
+        }
+        _url.clear(); // Clear URL
+      });
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    if (_selectedFile == null && _url.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Пожалуйста, выберите файл или укажите URL потока')),
+      );
+      return;
+    }
+
     setState(() => _loading = true);
     try {
+      File? fileObj;
+      if (!kIsWeb && _selectedFile?.path != null) {
+        // Not web
+        fileObj = File(_selectedFile!.path!);
+      }
+      
       await context.read<LibraryController>().addTrack(
-            title: _title.text,
-            artist: _artist.text,
-            streamUrl: _url.text,
-            artworkUrl: _art.text.isEmpty ? null : _art.text,
+            title: _title.text.trim(),
+            artist: _artist.text.trim(),
+            streamUrl: _url.text.isEmpty ? null : _url.text.trim(),
+            audioFile: fileObj,
+            audioBytes: _selectedFile?.bytes,
+            audioFileName: _selectedFile?.name,
+            artworkUrl: _art.text.isEmpty ? null : _art.text.trim(),
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Трек добавлен')),
+          const SnackBar(content: Text('Трек успешно загружен')),
         );
         context.pop();
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось сохранить: $e')),
+          SnackBar(content: Text('Ошибка при загрузке: $e')),
         );
       }
     } finally {
@@ -58,9 +103,12 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // В зависимости от того, выбран ли файл, мы дизейблим ввод URL
+    final hasFile = _selectedFile != null;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Новый трек'),
+        title: const Text('Загрузить трек'),
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
           onPressed: () => context.pop(),
@@ -75,11 +123,81 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'Укажите прямую ссылку на аудиопоток (например MP3 по HTTPS). '
-                  'Обложка — необязательно.',
+                  'Добавьте свой собственный MP3/WAV трек или укажите прямую ссылку на стрим.',
                   style: TextStyle(color: AppTheme.textSecondary, height: 1.4),
                 ),
                 const SizedBox(height: 24),
+
+                // File Upload Section
+                InkWell(
+                  onTap: _pickFile,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: hasFile ? AppTheme.accent.withValues(alpha: 0.1) : AppTheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: hasFile ? AppTheme.accent : AppTheme.surfaceHighlight,
+                        width: 2,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                         Icon(
+                           hasFile ? Icons.audio_file_rounded : Icons.cloud_upload_outlined,
+                           color: hasFile ? AppTheme.accent : AppTheme.textSecondary,
+                           size: 48,
+                         ),
+                         const SizedBox(height: 12),
+                         Text(
+                           hasFile ? _selectedFile!.name : 'Выбрать аудиофайл с устройства',
+                           textAlign: TextAlign.center,
+                           style: TextStyle(
+                              color: hasFile ? AppTheme.accent : AppTheme.textSecondary,
+                              fontWeight: FontWeight.w600,
+                           ),
+                         ),
+                         if (hasFile) ...[
+                           const SizedBox(height: 8),
+                           TextButton.icon(
+                             onPressed: () => setState(() => _selectedFile = null),
+                             icon: const Icon(Icons.close, size: 16, color: Colors.redAccent),
+                             label: const Text('Убрать', style: TextStyle(color: Colors.redAccent)),
+                             style: TextButton.styleFrom(
+                               minimumSize: Size.zero, 
+                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                             ),
+                           ),
+                         ]
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+                const Center(
+                  child: Text('ИЛИ', style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 16),
+
+                TextFormField(
+                  controller: _url,
+                  enabled: !hasFile,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    labelText: 'Вставить прямой URL потока',
+                    prefixIcon: const Icon(Icons.link_rounded),
+                    filled: !hasFile,
+                    fillColor: hasFile ? Colors.transparent : AppTheme.surface,
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+                const Divider(height: 1, color: AppTheme.surfaceHighlight),
+                const SizedBox(height: 32),
+
                 TextFormField(
                   controller: _title,
                   decoration: const InputDecoration(
@@ -101,24 +219,6 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
-                  controller: _url,
-                  keyboardType: TextInputType.url,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'URL потока',
-                    prefixIcon: Icon(Icons.link_rounded),
-                  ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Вставьте ссылку';
-                    final u = v.trim();
-                    if (!u.startsWith('http://') && !u.startsWith('https://')) {
-                      return 'Ссылка должна начинаться с http:// или https://';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
                   controller: _art,
                   keyboardType: TextInputType.url,
                   autocorrect: false,
@@ -127,16 +227,19 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
                     prefixIcon: Icon(Icons.image_outlined),
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 48),
                 ElevatedButton(
                   onPressed: _loading ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
                   child: _loading
                       ? const SizedBox(
                           height: 22,
                           width: 22,
                           child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.onAccent),
                         )
-                      : const Text('СОХРАНИТЬ'),
+                      : const Text('ДОБАВИТЬ ТРЕК', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),

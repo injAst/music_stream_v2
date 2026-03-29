@@ -9,7 +9,9 @@ import 'package:postgres/postgres.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 import 'package:shelf_cors_headers/shelf_cors_headers.dart';
+import 'package:shelf_multipart/shelf_multipart.dart';
 import 'package:shelf_router/shelf_router.dart';
+import 'package:shelf_static/shelf_static.dart';
 
 Future<void> runServer(List<String> args) async {
   final dotEnv = DotEnv(includePlatformEnvironment: true)..load();
@@ -79,6 +81,50 @@ Handler _buildApp({required Connection conn, required String jwtSecret}) {
   }
 
   router.get('/health', (_) => Response.ok('ok'));
+
+  router.mount('/uploads/', createStaticHandler('uploads'));
+
+  router.post('/v1/upload', (Request req) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Нужна авторизация'}, status: 401);
+
+    final formReq = req.formData();
+    if (formReq == null) {
+      return jsonRes({'error': 'Ожидался multipart/form-data'}, status: 400);
+    }
+
+    try {
+      String? fileUrl;
+      await for (final data in formReq.formData) {
+        if (data.name == 'file') {
+          final filename = data.filename ?? 'upload.mp3';
+          final ext = filename.contains('.') ? filename.split('.').last : 'mp3';
+          final newName = '${DateTime.now().millisecondsSinceEpoch}_${uid.hashCode}.$ext';
+          
+          final dir = Directory('uploads/audio');
+          if (!await dir.exists()) await dir.create(recursive: true);
+          
+          final file = File('uploads/audio/$newName');
+          final sink = file.openWrite();
+          await sink.addStream(data.part);
+          await sink.close();
+          
+          final scheme = req.requestedUri.scheme;
+          final host = req.requestedUri.host;
+          final port = req.requestedUri.port;
+          fileUrl = '$scheme://$host:$port/uploads/audio/$newName';
+        }
+      }
+
+      if (fileUrl != null) {
+        return jsonRes({'url': fileUrl});
+      } else {
+        return jsonRes({'error': 'Файл с полем "file" не найден'}, status: 400);
+      }
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
 
   router.post('/v1/auth/register', (Request req) async {
     try {
