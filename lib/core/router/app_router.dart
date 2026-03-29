@@ -4,6 +4,7 @@ import '../../features/auth/login_screen.dart';
 import '../../features/auth/register_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../features/profile/edit_profile_screen.dart';
+import '../../features/profile/user_profile_screen.dart';
 import '../../features/tracks/add_track_screen.dart';
 import '../../providers/auth_controller.dart';
 
@@ -38,6 +39,12 @@ GoRouter createAppRouter(AuthController auth) {
       GoRoute(
         path: '/edit-profile',
         builder: (_, __) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: '/profile/:id',
+        builder: (_, state) => UserProfileScreen(
+          userId: state.pathParameters['id']!,
+        ),
       ),
     ],
   );

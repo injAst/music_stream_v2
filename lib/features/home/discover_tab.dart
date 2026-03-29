@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../data/models/track.dart';
+import '../../data/models/user_profile.dart';
+import '../../data/repositories/user_repository.dart';
 import '../../providers/audio_player_controller.dart';
-import '../../providers/auth_controller.dart';
 import '../../providers/library_controller.dart';
 import '../widgets/track_artwork.dart';
 
@@ -29,11 +32,9 @@ class DiscoverTab extends StatelessWidget {
               SliverAppBar(
                 pinned: true,
                 backgroundColor: AppTheme.background.withValues(alpha: 0.9),
-                title: Consumer<AuthController>(
-                  builder: (context, auth, _) => const Text(
-                    'Главное',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 24),
-                  ),
+                title: const Text(
+                  'Главное',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 24),
                 ),
                 actions: [
                   IconButton(
@@ -46,6 +47,10 @@ class DiscoverTab extends StatelessWidget {
                   ),
                 ],
               ),
+
+              // Поиск пользователей
+              const SliverToBoxAdapter(child: _UserSearchSection()),
+
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -173,15 +178,17 @@ class DiscoverTab extends StatelessWidget {
                           ],
                         ),
                       ),
-                      ElevatedButton(
-                        onPressed: track != null ? () => context.read<AudioPlayerController>().playTrack(track) : null,
-                        style: ElevatedButton.styleFrom(
-                          shape: const CircleBorder(),
-                          padding: const EdgeInsets.all(16),
-                          backgroundColor: AppTheme.accent,
-                          foregroundColor: AppTheme.onAccent,
+                      Material(
+                        color: AppTheme.accent,
+                        shape: const CircleBorder(),
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: track != null ? () => context.read<AudioPlayerController>().playTrack(track) : null,
+                          child: const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Icon(Icons.play_arrow_rounded, size: 32, color: AppTheme.onAccent),
+                          ),
                         ),
-                        child: const Icon(Icons.play_arrow_rounded, size: 32),
                       ),
                     ],
                   ),
@@ -377,6 +384,165 @@ class _VerticalTrackTile extends StatelessWidget {
             )
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── Поиск пользователей ────────────────────────────────────────────────────
+
+class _UserSearchSection extends StatefulWidget {
+  const _UserSearchSection();
+
+  @override
+  State<_UserSearchSection> createState() => _UserSearchSectionState();
+}
+
+class _UserSearchSectionState extends State<_UserSearchSection> {
+  final _controller = TextEditingController();
+  Timer? _debounce;
+  List<UserProfile> _results = [];
+  bool _searching = false;
+  bool _active = false; // виден ли блок результатов
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onChanged(String value) {
+    _debounce?.cancel();
+    if (value.trim().isEmpty) {
+      setState(() { _results = []; _active = false; _searching = false; });
+      return;
+    }
+    setState(() { _active = true; _searching = true; });
+    _debounce = Timer(const Duration(milliseconds: 450), () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final repo = UserRepository(prefs);
+        final found = await repo.searchUsers(value.trim());
+        if (!mounted) return;
+        setState(() { _results = found; _searching = false; });
+      } catch (_) {
+        if (!mounted) return;
+        setState(() { _searching = false; });
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Строка поиска
+          TextField(
+            controller: _controller,
+            onChanged: _onChanged,
+            decoration: InputDecoration(
+              hintText: 'Найти пользователя...',
+              prefixIcon: const Icon(Icons.person_search_rounded,
+                  color: AppTheme.textSecondary),
+              suffixIcon: _active
+                  ? IconButton(
+                      icon: const Icon(Icons.close, color: AppTheme.textSecondary),
+                      onPressed: () {
+                        _controller.clear();
+                        setState(() {
+                          _results = [];
+                          _active = false;
+                          _searching = false;
+                        });
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: AppTheme.surfaceHighlight,
+              contentPadding: EdgeInsets.zero,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(24),
+                borderSide: const BorderSide(color: AppTheme.accent, width: 1.5),
+              ),
+            ),
+          ),
+
+          // Результаты поиска
+          if (_active) ...[
+            const SizedBox(height: 8),
+            if (_searching)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                        color: AppTheme.accent, strokeWidth: 2),
+                  ),
+                ),
+              )
+            else if (_results.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                child: Text('Пользователи не найдены',
+                    style: TextStyle(color: AppTheme.textSecondary)),
+              )
+            else
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: _results.map((user) {
+                    return ListTile(
+                      onTap: () {
+                        FocusScope.of(context).unfocus();
+                        context.push('/profile/${user.id}');
+                      },
+                      leading: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: AppTheme.surfaceHighlight,
+                        backgroundImage:
+                            user.avatarUrl != null && user.avatarUrl!.isNotEmpty
+                                ? NetworkImage(user.avatarUrl!)
+                                : null,
+                        child: user.avatarUrl == null || user.avatarUrl!.isEmpty
+                            ? Text(
+                                user.displayName.isNotEmpty
+                                    ? user.displayName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 16),
+                              )
+                            : null,
+                      ),
+                      title: Text(user.displayName,
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                      trailing: const Icon(Icons.chevron_right_rounded,
+                          color: AppTheme.textSecondary),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    );
+                  }).toList(),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ],
       ),
     );
   }

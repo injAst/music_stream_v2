@@ -53,6 +53,7 @@ class AuthRepository {
       final body = jsonDecode(res.body);
       final u = body['user'];
       return UserProfile(
+        id: u['id']?.toString() ?? '',
         email: u['email'] ?? '',
         displayName: u['display_name'] ?? '',
         avatarUrl: u['avatar_url'],

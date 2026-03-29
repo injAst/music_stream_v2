@@ -459,5 +459,146 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
     }
   });
 
+  // Поиск пользователей по нику
+  router.get('/v1/users/search', (Request req) async {
+    final q = req.url.queryParameters['q']?.trim() ?? '';
+    if (q.isEmpty) return jsonRes({'users': []});
+    try {
+      final rs = await conn.execute(
+        Sql.named('SELECT id::text, display_name, avatar_url FROM app_users WHERE display_name ILIKE @q LIMIT 20'),
+        parameters: {'q': '%$q%'},
+      );
+      
+      final users = rs.map((row) {
+        return {
+          'id': row[0].toString(), 
+          'display_name': row[1]?.toString() ?? '',
+          'avatar_url': row[2]?.toString(),
+        };
+      }).toList();
+      
+      return jsonRes({'users': users});
+    } catch (e, stack) {
+      print('SEARCH ERROR: $e\n$stack');
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  // Получить профиль пользователя и его треки
+  router.get('/v1/users/<id>', (Request req, String id) async {
+    final uid = userIdFromToken(req);
+    final uidStr = uid ?? '';
+    try {
+      // 1. Профиль
+      final userRs = await conn.execute(
+        Sql.named('SELECT id::text, email, display_name, avatar_url FROM app_users WHERE id = @id::uuid'),
+        parameters: {'id': id},
+      );
+      if (userRs.isEmpty) return jsonRes({'error': 'Пользователь не найден'}, status: 404);
+      final uRow = userRs.first;
+      final user = {
+        'id': uRow[0].toString(),
+        'email': uRow[1].toString(),
+        'display_name': uRow[2].toString(),
+        'avatar_url': uRow[3],
+      };
+
+      // 2. Публичные треки пользователя
+      final tracksRs = await conn.execute(
+        Sql.named(
+          '''
+          SELECT
+            t.id::text,
+            t.title,
+            t.artist,
+            t.stream_url,
+            t.artwork_url,
+            t.duration_seconds,
+            COUNT(l.user_id) AS l_count,
+            CASE
+              WHEN @uidStr != '' AND MAX(CASE WHEN l.user_id::text = @uidStr THEN 1 ELSE 0 END) = 1
+              THEN true ELSE false
+            END AS is_l,
+            false AS c_del
+          FROM tracks t
+          LEFT JOIN track_likes l ON t.id = l.track_id
+          WHERE t.owner_id = @ownerId::uuid AND t.is_public = TRUE
+          GROUP BY t.id
+          ORDER BY t.created_at DESC
+          ''',
+        ),
+        parameters: {'ownerId': id, 'uidStr': uidStr},
+      );
+
+      final tracks = tracksRs.map((row) {
+        return {
+          'id': row[0].toString(),
+          'title': row[1].toString(),
+          'artist': row[2].toString(),
+          'stream_url': row[3].toString(),
+          'artwork_url': row[4],
+          'duration_seconds': row[5],
+          'likes_count': int.tryParse(row[6]?.toString() ?? '0') ?? 0,
+          'is_liked': row[7] == true,
+          'can_delete': false,
+        };
+      }).toList();
+
+      return jsonRes({
+        'user': user,
+        'tracks': tracks,
+      });
+    } catch (e, st) {
+      print('GET USER ERROR: $e\n$st');
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  // Избранное пользователя
+  router.get('/v1/users/<id>/liked', (Request req, String id) async {
+    final uid = userIdFromToken(req);
+    final uidStr = uid ?? '';
+    try {
+      final rs = await conn.execute(
+        Sql.named(
+          '''
+          SELECT
+            t.id::text, t.title, t.artist, t.stream_url, t.artwork_url,
+            t.duration_seconds, t.owner_id::text, COUNT(l2.user_id),
+            CASE
+              WHEN @uidStr != '' AND MAX(CASE WHEN l2.user_id::text = @uidStr THEN 1 ELSE 0 END) = 1
+              THEN true ELSE false
+            END AS is_l
+          FROM track_likes l
+          JOIN tracks t ON t.id = l.track_id
+          LEFT JOIN track_likes l2 ON l2.track_id = t.id
+          WHERE l.user_id = @profileId::uuid AND t.is_public = TRUE
+          GROUP BY t.id, l.created_at
+          ORDER BY l.created_at DESC
+          ''',
+        ),
+        parameters: {'profileId': id, 'uidStr': uidStr},
+      );
+      final tracks = rs.map((row) {
+        return {
+          'id': row[0].toString(),
+          'title': row[1].toString(),
+          'artist': row[2].toString(),
+          'stream_url': row[3].toString(),
+          'artwork_url': row[4],
+          'duration_seconds': row[5],
+          'owner_id': row[6]?.toString(),
+          'likes_count': int.tryParse(row[7]?.toString() ?? '0') ?? 0,
+          'is_liked': row[8] == true,
+          'can_delete': false,
+        };
+      }).toList();
+      return jsonRes({'tracks': tracks});
+    } catch (e, st) {
+      print('LIKED ERROR: $e\n$st');
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
   return router.call;
 }
