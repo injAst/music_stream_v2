@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:just_audio/just_audio.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../providers/audio_player_controller.dart';
@@ -146,15 +147,54 @@ class _PlayerControls extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             IconButton(
-              iconSize: 48,
+              onPressed: () => audio.toggleShuffle(),
+              icon: Icon(
+                Icons.shuffle,
+                color: audio.shuffleEnabled ? AppTheme.accent : AppTheme.textSecondary,
+                size: 24,
+              ),
+            ),
+            IconButton(
+              onPressed: audio.hasPrevious || audio.position.inSeconds > 3
+                  ? () => audio.previous()
+                  : null,
+              icon: const Icon(
+                Icons.skip_previous_rounded,
+                size: 36,
+              ),
+              color: audio.hasPrevious || audio.position.inSeconds > 3
+                  ? AppTheme.textPrimary
+                  : AppTheme.textSecondary.withValues(alpha: 0.3),
+            ),
+            IconButton(
+              iconSize: 64,
               onPressed: () => audio.togglePlayPause(),
+              padding: EdgeInsets.zero,
               icon: Icon(
                 audio.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
                 color: AppTheme.accent,
-                size: 64,
+                size: 72,
+              ),
+            ),
+            IconButton(
+              onPressed: audio.hasNext ? () => audio.next() : null,
+              icon: const Icon(
+                Icons.skip_next_rounded,
+                size: 36,
+              ),
+              color: audio.hasNext
+                  ? AppTheme.textPrimary
+                  : AppTheme.textSecondary.withValues(alpha: 0.3),
+            ),
+            IconButton(
+              onPressed: () => audio.toggleLoopMode(),
+              icon: Icon(
+                audio.loopMode == LoopMode.one ? Icons.repeat_one : Icons.repeat,
+                color: audio.loopMode != LoopMode.off ? AppTheme.accent : AppTheme.textSecondary,
+                size: 24,
               ),
             ),
           ],

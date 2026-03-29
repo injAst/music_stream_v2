@@ -83,7 +83,7 @@ class _LibraryTabState extends State<LibraryTab> {
                     final t = tracks[i];
                     return _TrackTile(
                       track: t,
-                      onPlay: () => context.read<AudioPlayerController>().playTrack(t),
+                      onPlay: () => context.read<AudioPlayerController>().playTrack(t, playlist: tracks),
                     );
                   },
                 ),
@@ -99,6 +99,10 @@ class _LibraryTabState extends State<LibraryTab> {
   Widget _buildHeader(BuildContext context, bool hasTracks) {
     final auth = context.read<AuthController>();
     final username = auth.user?.displayName ?? 'Пользователь';
+
+    // Получаем текущий список треков из Consumer выше или через Provider
+    final lib = context.read<LibraryController>();
+    final tracks = lib.tracks.where((t) => t.isLiked).toList();
 
     // Для десктопа/планшета делаем горизонтальный лейаут, для мобильного - вертикальный.
     final isDesktop = MediaQuery.of(context).size.width > 600;
@@ -122,7 +126,7 @@ class _LibraryTabState extends State<LibraryTab> {
                     const SizedBox(height: 12),
                     Text(username, style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary)),
                     const SizedBox(height: 24),
-                    _HeaderActions(hasTracks: hasTracks),
+                    _HeaderActions(tracks: tracks),
                   ],
                 ),
               ),
@@ -139,7 +143,7 @@ class _LibraryTabState extends State<LibraryTab> {
                const SizedBox(height: 8),
                Text(username, style: const TextStyle(fontSize: 16)),
                const SizedBox(height: 16),
-               _HeaderActions(hasTracks: hasTracks),
+               _HeaderActions(tracks: tracks),
             ],
           ),
     );
@@ -232,15 +236,19 @@ class _LibraryTabState extends State<LibraryTab> {
 }
 
 class _HeaderActions extends StatelessWidget {
-  const _HeaderActions({required this.hasTracks});
-  final bool hasTracks;
+  const _HeaderActions({required this.tracks});
+  final List<Track> tracks;
 
   @override
   Widget build(BuildContext context) {
+    final hasTracks = tracks.isNotEmpty;
+    
     return Row(
       children: [
         ElevatedButton.icon(
-          onPressed: hasTracks ? () {} : null, // Заглушка
+          onPressed: hasTracks 
+            ? () => context.read<AudioPlayerController>().playTrack(tracks.first, playlist: tracks)
+            : null,
           icon: const Icon(Icons.play_arrow_rounded, size: 28),
           label: const Text('Слушать', style: TextStyle(fontSize: 16)),
           style: ElevatedButton.styleFrom(
@@ -250,8 +258,15 @@ class _HeaderActions extends StatelessWidget {
         ),
         const SizedBox(width: 16),
         IconButton(
-          onPressed: () {},
-          icon: const Icon(Icons.notifications_off_outlined), // колокольчик с дизайном
+          onPressed: hasTracks 
+            ? () async {
+                final audio = context.read<AudioPlayerController>();
+                // Включаем перемешивание и запускаем первый случайный трек
+                if (!audio.shuffleEnabled) await audio.toggleShuffle();
+                audio.playTrack(tracks[0], playlist: tracks);
+              }
+            : null,
+          icon: const Icon(Icons.shuffle),
           color: AppTheme.textSecondary,
         ),
         IconButton(

@@ -21,6 +21,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   bool _isLoading = true;
   String? _error;
   UserProfile? _profile;
+  List<Track> _ownedTracks = [];
   List<Track> _likedTracks = [];
 
   @override
@@ -41,7 +42,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       ]);
       if (!mounted) return;
       setState(() {
-        _profile = (results[0] as Map<String, dynamic>)['user'] as UserProfile;
+        final profileData = results[0] as Map<String, dynamic>;
+        _profile = profileData['user'] as UserProfile;
+        _ownedTracks = profileData['tracks'] as List<Track>;
         _likedTracks = results[1] as List<Track>;
         _isLoading = false;
       });
@@ -98,7 +101,36 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         // Шапка профиля
         SliverToBoxAdapter(child: _buildHeader()),
 
-        // Заголовок секции
+        // Секция собственных треков (Загруженные)
+        if (_ownedTracks.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+              child: Row(
+                children: [
+                   const Icon(Icons.music_note_rounded, color: AppTheme.accent, size: 20),
+                   const SizedBox(width: 8),
+                   Text(
+                     'Загруженные · ${_ownedTracks.length}',
+                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                   ),
+                ],
+              ),
+            ),
+          ),
+          SliverList.builder(
+            itemCount: _ownedTracks.length,
+            itemBuilder: (context, i) {
+              final track = _ownedTracks[i];
+              return _LikedTrackTile(
+                track: track,
+                onPlay: () => context.read<AudioPlayerController>().playTrack(track, playlist: _ownedTracks),
+              );
+            },
+          ),
+        ],
+
+        // Секция лайков (Избранное)
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
@@ -118,15 +150,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
         ),
 
-        // Список лайкнутых
-        if (_likedTracks.isEmpty)
+        if (_likedTracks.isEmpty && _ownedTracks.isEmpty)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: Center(
               child: Padding(
                 padding: EdgeInsets.all(40),
                 child: Text(
-                  'Пользователь пока ничего не добавил в избранное',
+                  'Пользователь пока ничего не добавил',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppTheme.textSecondary),
                 ),
@@ -140,7 +171,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               final track = _likedTracks[i];
               return _LikedTrackTile(
                 track: track,
-                onPlay: () => context.read<AudioPlayerController>().playTrack(track),
+                onPlay: () => context.read<AudioPlayerController>().playTrack(track, playlist: _likedTracks),
               );
             },
           ),

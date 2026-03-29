@@ -8,23 +8,58 @@ class AudioPlayerController extends ChangeNotifier {
     _player.playerStateStream.listen((_) => notifyListeners());
     _player.positionStream.listen((_) => notifyListeners());
     _player.durationStream.listen((_) => notifyListeners());
+    _player.shuffleModeEnabledStream.listen((_) => notifyListeners());
+    _player.loopModeStream.listen((_) => notifyListeners());
+    
+    // Слушаем изменение индекса текущего трека
+    _player.currentIndexStream.listen((index) {
+      if (index != null && _currentPlaylist.isNotEmpty) {
+        _currentIndex = index;
+        notifyListeners();
+      }
+    });
   }
 
   final AudioPlayer _player = AudioPlayer();
-  Track? _queue;
+  List<Track> _currentPlaylist = [];
+  int _currentIndex = -1;
 
-  Track? get currentTrack => _queue;
+  Track? get currentTrack {
+    if (_currentIndex >= 0 && _currentIndex < _currentPlaylist.length) {
+      return _currentPlaylist[_currentIndex];
+    }
+    return null;
+  }
+  
   AudioPlayer get player => _player;
 
   bool get isPlaying => _player.playing;
   Duration get position => _player.position;
   Duration? get duration => _player.duration;
+  
+  bool get shuffleEnabled => _player.shuffleModeEnabled;
+  LoopMode get loopMode => _player.loopMode;
+  
+  bool get hasNext => _player.hasNext;
+  bool get hasPrevious => _player.hasPrevious;
 
-  Future<void> playTrack(Track track) async {
-    _queue = track;
+  Future<void> playTrack(Track track, {List<Track>? playlist}) async {
+    // Если передан плейлист, используем его, иначе создаем из одного трека
+    _currentPlaylist = playlist ?? [track];
+    _currentIndex = _currentPlaylist.indexOf(track);
+    if (_currentIndex == -1) {
+      _currentPlaylist.insert(0, track);
+      _currentIndex = 0;
+    }
+
     notifyListeners();
+
     try {
-      await _player.setUrl(track.streamUrl);
+      final source = ConcatenatingAudioSource(
+        children: _currentPlaylist.map((t) => AudioSource.uri(Uri.parse(t.streamUrl))).toList(),
+      );
+      
+      await _player.setAudioSource(source, initialIndex: _currentIndex);
       await _player.play();
     } catch (e) {
       debugPrint('playTrack error: $e');
@@ -32,11 +67,47 @@ class AudioPlayerController extends ChangeNotifier {
     }
   }
 
+  Future<void> next() async {
+    if (_player.hasNext) {
+      await _player.seekToNext();
+    }
+  }
+
+  Future<void> previous() async {
+    if (_player.hasPrevious) {
+      await _player.seekToPrevious();
+    } else {
+      await _player.seek(Duration.zero);
+    }
+  }
+
+  Future<void> toggleShuffle() async {
+    final newValue = !_player.shuffleModeEnabled;
+    await _player.setShuffleModeEnabled(newValue);
+    if (newValue) {
+      await _player.shuffle();
+    }
+  }
+
+  Future<void> toggleLoopMode() async {
+    switch (_player.loopMode) {
+      case LoopMode.off:
+        await _player.setLoopMode(LoopMode.all);
+        break;
+      case LoopMode.all:
+        await _player.setLoopMode(LoopMode.one);
+        break;
+      case LoopMode.one:
+        await _player.setLoopMode(LoopMode.off);
+        break;
+    }
+  }
+
   Future<void> togglePlayPause() async {
     if (_player.playing) {
       await _player.pause();
     } else {
-      if (_queue != null && _player.processingState == ProcessingState.completed) {
+      if (currentTrack != null && _player.processingState == ProcessingState.completed) {
         await _player.seek(Duration.zero);
       }
       await _player.play();

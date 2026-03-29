@@ -54,7 +54,7 @@ class DiscoverTab extends StatelessWidget {
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: _buildHeroCard(context, tracks.isNotEmpty ? tracks.first : null),
+                  child: _buildHeroCard(context, tracks.isNotEmpty ? tracks.first : null, tracks),
                 ),
               ),
               if (tracks.isNotEmpty) ...[
@@ -91,7 +91,7 @@ class DiscoverTab extends StatelessWidget {
                       itemBuilder: (context, i) {
                         return _HorizontalTrackCard(
                           track: tracks[i],
-                          onTap: () => context.read<AudioPlayerController>().playTrack(tracks[i]),
+                          onTap: () => context.read<AudioPlayerController>().playTrack(tracks[i], playlist: tracks),
                         );
                       },
                     ),
@@ -113,7 +113,7 @@ class DiscoverTab extends StatelessWidget {
                     final t = tracks[i];
                     return _VerticalTrackTile(
                       track: t,
-                      onPlay: () => context.read<AudioPlayerController>().playTrack(t),
+                      onPlay: () => context.read<AudioPlayerController>().playTrack(t, playlist: tracks),
                     );
                   },
                 ),
@@ -126,7 +126,7 @@ class DiscoverTab extends StatelessWidget {
     );
   }
 
-  Widget _buildHeroCard(BuildContext context, Track? track) {
+  Widget _buildHeroCard(BuildContext context, Track? track, List<Track> tracks) {
     return Container(
       height: 220,
       decoration: BoxDecoration(
@@ -183,7 +183,7 @@ class DiscoverTab extends StatelessWidget {
                         shape: const CircleBorder(),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
-                          onTap: track != null ? () => context.read<AudioPlayerController>().playTrack(track) : null,
+                          onTap: track != null ? () => context.read<AudioPlayerController>().playTrack(track, playlist: tracks) : null,
                           child: const Padding(
                             padding: EdgeInsets.all(16),
                             child: Icon(Icons.play_arrow_rounded, size: 32, color: AppTheme.onAccent),

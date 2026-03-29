@@ -519,10 +519,11 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
               WHEN @uidStr != '' AND MAX(CASE WHEN l.user_id::text = @uidStr THEN 1 ELSE 0 END) = 1
               THEN true ELSE false
             END AS is_l,
-            false AS c_del
+            CASE WHEN t.owner_id = @uidStr::uuid THEN true ELSE false END AS c_del
           FROM tracks t
           LEFT JOIN track_likes l ON t.id = l.track_id
-          WHERE t.owner_id = @ownerId::uuid AND t.is_public = TRUE
+          WHERE t.owner_id = @ownerId::uuid 
+            AND (t.is_public = TRUE OR t.owner_id = @uidStr::uuid)
           GROUP BY t.id
           ORDER BY t.created_at DESC
           ''',
@@ -540,7 +541,7 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
           'duration_seconds': row[5],
           'likes_count': int.tryParse(row[6]?.toString() ?? '0') ?? 0,
           'is_liked': row[7] == true,
-          'can_delete': false,
+          'can_delete': row[8] == true,
         };
       }).toList();
 
@@ -572,7 +573,8 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
           FROM track_likes l
           JOIN tracks t ON t.id = l.track_id
           LEFT JOIN track_likes l2 ON l2.track_id = t.id
-          WHERE l.user_id = @profileId::uuid AND t.is_public = TRUE
+          WHERE l.user_id = @profileId::uuid 
+            AND (t.is_public = TRUE OR t.owner_id = @uidStr::uuid)
           GROUP BY t.id, l.created_at
           ORDER BY l.created_at DESC
           ''',
