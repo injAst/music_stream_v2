@@ -31,15 +31,33 @@ Future<void> runServer(List<String> args) async {
     exit(1);
   }
 
-  final conn = await Connection.openFromUrl(dbUrl);
-  final app = _buildApp(conn: conn, jwtSecret: jwtSecret);
+  final u = Uri.parse(dbUrl);
+  final endpoint = Endpoint(
+    host: u.host,
+    port: u.port == 0 ? 5432 : u.port,
+    database: u.path.replaceAll('/', ''),
+    username: u.userInfo.split(':')[0],
+    password: u.userInfo.contains(':') ? u.userInfo.substring(u.userInfo.indexOf(':') + 1) : null,
+  );
+  
+  final sslModeParam = u.queryParameters['sslmode'];
+  final sslMode = sslModeParam == 'disable' ? SslMode.disable : SslMode.require;
+  
+  final pool = Pool<void>.withEndpoints(
+    [endpoint],
+    settings: PoolSettings(
+       maxConnectionCount: 20,
+       sslMode: sslMode,
+    ),
+  );
+  final app = _buildApp(conn: pool, jwtSecret: jwtSecret);
   final handler = Pipeline().addMiddleware(corsHeaders()).addHandler(app);
 
   final server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
   stdout.writeln('Pulse Music API → http://${server.address.host}:${server.port}');
 }
 
-Handler _buildApp({required Connection conn, required String jwtSecret}) {
+Handler _buildApp({required Session conn, required String jwtSecret}) {
   final router = Router();
 
   Response jsonRes(Object? body, {int status = 200}) => Response(
@@ -82,7 +100,20 @@ Handler _buildApp({required Connection conn, required String jwtSecret}) {
 
   router.get('/health', (_) => Response.ok('ok'));
 
-  router.mount('/uploads/', createStaticHandler('uploads'));
+  final staticHandler = createStaticHandler('uploads');
+  final cachedStaticHandler = const Pipeline()
+      .addMiddleware((innerHandler) => (request) async {
+            final response = await innerHandler(request);
+            if (response.statusCode == 200) {
+              return response.change(headers: {
+                ...response.headers,
+                'Cache-Control': 'public, max-age=31536000',
+              });
+            }
+            return response;
+          })
+      .addHandler(staticHandler);
+  router.mount('/uploads/', cachedStaticHandler);
 
   router.post('/v1/upload', (Request req) async {
     final uid = userIdFromToken(req);

@@ -27,6 +27,7 @@ class TrackArtwork extends StatelessWidget {
             ? CachedNetworkImage(
                 imageUrl: u,
                 fit: BoxFit.cover,
+                memCacheWidth: (size * 3).toInt(),
                 placeholder: (_, __) => Container(color: AppTheme.surfaceHighlight),
                 errorWidget: (_, __, ___) => _placeholder(),
               )

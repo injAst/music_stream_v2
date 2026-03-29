@@ -307,8 +307,9 @@ class _VerticalTrackTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final audio = context.watch<AudioPlayerController>();
-    final isPlayingThis = audio.currentTrack?.id == track.id;
+    final isPlayingThis = context.select<AudioPlayerController, bool>(
+      (audio) => audio.currentTrack?.id == track.id,
+    );
 
     return InkWell(
       onTap: onPlay,
