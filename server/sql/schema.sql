@@ -43,3 +43,13 @@ SELECT NULL, TRUE, 'SoundHelix Song 3', 'SoundHelix',
   'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
   'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400', 418
 WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE is_public = TRUE AND title = 'SoundHelix Song 3');
+
+CREATE TABLE IF NOT EXISTS track_likes (
+  user_id UUID REFERENCES app_users (id) ON DELETE CASCADE,
+  track_id UUID REFERENCES tracks (id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, track_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_likes_track ON track_likes (track_id);
+CREATE INDEX IF NOT EXISTS idx_likes_user ON track_likes (user_id);
