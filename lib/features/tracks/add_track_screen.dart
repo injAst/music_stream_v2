@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -24,7 +25,9 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
   final _formKey = GlobalKey<FormState>();
   
   PlatformFile? _selectedFile;
+  int? _extractedDuration;
   bool _loading = false;
+  bool _extractingDuration = false;
 
   @override
   void dispose() {
@@ -46,6 +49,8 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
       final file = result.files.single;
       setState(() {
         _selectedFile = file;
+        _extractedDuration = null; // Reset
+        _extractingDuration = true;
         
         if (_title.text.isEmpty) {
            String name = file.name;
@@ -54,6 +59,49 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
         }
         _url.clear(); // Clear URL
       });
+
+      // Фоновое извлечение длительности
+      _extractDuration(file);
+    }
+  }
+
+  Future<void> _extractDuration(PlatformFile file) async {
+    final player = AudioPlayer();
+    try {
+      debugPrint('Extracting duration for: ${file.name}');
+      Duration? duration;
+      
+      if (kIsWeb) {
+        if (file.bytes != null) {
+          // На вебе используем Data URI или Blob
+          final uri = Uri.dataFromBytes(file.bytes!, mimeType: 'audio/mpeg');
+          duration = await player.setAudioSource(AudioSource.uri(uri));
+        }
+      } else if (file.path != null) {
+        duration = await player.setFilePath(file.path!);
+      }
+      
+      // Если сразу не определилось, ждем немного поток метаданных
+      if (duration == null) {
+        duration = await player.durationStream
+            .firstWhere((d) => d != null && d.inSeconds > 0)
+            .timeout(const Duration(seconds: 3), onTimeout: () => null);
+      }
+      
+      if (mounted) {
+        if (duration != null && duration.inSeconds > 0) {
+          debugPrint('Detected duration: ${duration.inSeconds}s');
+          setState(() => _extractedDuration = duration!.inSeconds);
+        } else {
+          debugPrint('Failed to detect duration for ${file.name}');
+          setState(() => _extractedDuration = 0); // Помечаем как 0 (неизвестно)
+        }
+      }
+    } catch (e) {
+      debugPrint('Error extracting duration: $e');
+    } finally {
+      await player.dispose();
+      if (mounted) setState(() => _extractingDuration = false);
     }
   }
 
@@ -83,6 +131,7 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
             audioBytes: _selectedFile?.bytes,
             audioFileName: _selectedFile?.name,
             artworkUrl: _art.text.isEmpty ? null : _art.text.trim(),
+            durationSeconds: _extractedDuration,
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -158,9 +207,22 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
                               fontWeight: FontWeight.w600,
                            ),
                          ),
-                         if (hasFile) ...[
-                           const SizedBox(height: 8),
-                           TextButton.icon(
+                          if (hasFile) ...[
+                            const SizedBox(height: 8),
+                             if (_extractedDuration != null)
+                               Padding(
+                                 padding: const EdgeInsets.only(bottom: 8),
+                                 child: Text(
+                                   _extractedDuration! > 0 
+                                      ? 'Длительность: ${_formatSec(_extractedDuration!)}'
+                                      : 'Длительность не определена',
+                                   style: TextStyle(
+                                     color: _extractedDuration! > 0 ? AppTheme.textSecondary : Colors.orangeAccent, 
+                                     fontSize: 13
+                                   ),
+                                 ),
+                               ),
+                            TextButton.icon(
                              onPressed: () => setState(() => _selectedFile = null),
                              icon: const Icon(Icons.close, size: 16, color: Colors.redAccent),
                              label: const Text('Убрать', style: TextStyle(color: Colors.redAccent)),
@@ -229,15 +291,27 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
                 ),
                 const SizedBox(height: 48),
                 ElevatedButton(
-                  onPressed: _loading ? null : _save,
+                  onPressed: (_loading || (_selectedFile != null && _extractingDuration)) ? null : _save,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: _loading
-                      ? const SizedBox(
+                  child: (_loading || (_selectedFile != null && _extractingDuration))
+                      ? SizedBox(
                           height: 22,
-                          width: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.onAccent),
+                          width: 200,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.onAccent),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(_extractingDuration ? 'ОПРЕДЕЛЕНИЕ ДЛИТЕЛЬНОСТИ...' : 'ЗАГРУЗКА...', 
+                                  style: const TextStyle(fontSize: 14)),
+                            ],
+                          ),
                         )
                       : const Text('ДОБАВИТЬ ТРЕК', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
@@ -247,5 +321,11 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
         ),
       ),
     );
+  }
+
+  String _formatSec(int sec) {
+    final m = sec ~/ 60;
+    final s = sec % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 }

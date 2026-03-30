@@ -490,9 +490,9 @@ class _TrackTile extends StatelessWidget {
   }
   
   String _formatSec(int? sec) {
-    if (sec == null) return '--:--';
+    if (sec == null || sec == 0) return '--:--';
     final m = sec ~/ 60;
     final s = sec % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2,'0')}';
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 }

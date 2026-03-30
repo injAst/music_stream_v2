@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../providers/auth_controller.dart';
+import '../../providers/library_controller.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -35,7 +36,10 @@ class _LoginScreenState extends State<LoginScreen> {
             email: _email.text,
             password: _password.text,
           );
-      if (mounted) context.go('/home');
+      if (mounted) {
+        await context.read<LibraryController>().load();
+        context.go('/home');
+      }
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -69,7 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Pulse Music',
+                      'FlowMusic',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.5,

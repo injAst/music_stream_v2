@@ -11,7 +11,7 @@ class PulseMusicApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Pulse Music',
+      title: 'FlowMusic',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark(),
       routerConfig: router,

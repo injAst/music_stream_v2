@@ -46,6 +46,7 @@ class TrackRepository {
     required String artist,
     required String streamUrl,
     String? artworkUrl,
+    int? durationSeconds,
   }) async {
     final res = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/tracks'),
@@ -55,6 +56,7 @@ class TrackRepository {
         'artist': artist,
         'stream_url': streamUrl,
         'artwork_url': artworkUrl,
+        'duration_seconds': durationSeconds ?? 0,
       }),
     );
     _handleError(res);

@@ -467,6 +467,26 @@ class _HorizontalTrackCard extends StatelessWidget {
               children: [
                 TrackArtwork(url: track.artworkUrl, size: 140, radius: 12),
                 Positioned(
+                  left: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _formatSec(track.durationSeconds),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
                   right: 8,
                   bottom: 8,
                   child: Container(
@@ -512,6 +532,13 @@ class _HorizontalTrackCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatSec(int? sec) {
+    if (sec == null || sec == 0) return '--:--';
+    final m = sec ~/ 60;
+    final s = sec % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 }
 
@@ -595,6 +622,16 @@ class _VerticalTrackTile extends StatelessWidget {
                    color: track.isLiked ? AppTheme.accent : AppTheme.textSecondary,
                    onPressed: () => context.read<LibraryController>().toggleLike(track.id),
                  ),
+                 const SizedBox(width: 4),
+                 Text(
+                   _formatSec(track.durationSeconds),
+                   style: const TextStyle(
+                     color: AppTheme.textSecondary, 
+                     fontSize: 12, 
+                     fontFeatures: [FontFeature.tabularFigures()],
+                   ),
+                 ),
+                 const SizedBox(width: 4),
                  IconButton(
                    icon: const Icon(Icons.more_vert, size: 20, color: AppTheme.textSecondary),
                    onPressed: onMore,
@@ -605,6 +642,13 @@ class _VerticalTrackTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _formatSec(int? sec) {
+    if (sec == null || sec == 0) return '--:--';
+    final m = sec ~/ 60;
+    final s = sec % 60;
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 }
 

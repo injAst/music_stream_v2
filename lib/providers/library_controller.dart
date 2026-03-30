@@ -35,6 +35,7 @@ class LibraryController extends ChangeNotifier {
     List<int>? audioBytes,
     String? audioFileName,
     String? artworkUrl,
+    int? durationSeconds,
   }) async {
     String finalStreamUrl = streamUrl ?? '';
     
@@ -55,6 +56,7 @@ class LibraryController extends ChangeNotifier {
       artist: artist,
       streamUrl: finalStreamUrl,
       artworkUrl: artworkUrl,
+      durationSeconds: durationSeconds,
     );
     await load();
   }
@@ -89,5 +91,22 @@ class LibraryController extends ChangeNotifier {
       _tracks[idx] = track;
       notifyListeners();
     }
+  }
+
+  void updateTrackDuration(String id, int seconds) {
+    if (seconds <= 0) return;
+    final idx = _tracks.indexWhere((t) => t.id == id);
+    if (idx != -1) {
+      if (_tracks[idx].durationSeconds == 0 || _tracks[idx].durationSeconds == null) {
+        _tracks[idx] = _tracks[idx].copyWith(durationSeconds: seconds);
+        notifyListeners();
+      }
+    }
+  }
+
+  void clear() {
+    _tracks = [];
+    _loading = false;
+    notifyListeners();
   }
 }

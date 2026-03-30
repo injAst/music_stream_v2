@@ -3,12 +3,16 @@ import 'package:just_audio/just_audio.dart';
 
 import '../core/config/api_config.dart';
 import '../data/models/track.dart';
+import 'library_controller.dart';
 
 class AudioPlayerController extends ChangeNotifier {
   AudioPlayerController() {
     _player.playerStateStream.listen((_) => notifyListeners());
     _player.positionStream.listen((_) => notifyListeners());
-    _player.durationStream.listen((_) => notifyListeners());
+    _player.durationStream.listen((d) {
+       _handleDurationChange(d);
+       notifyListeners();
+    });
     _player.shuffleModeEnabledStream.listen((_) => notifyListeners());
     _player.loopModeStream.listen((_) => notifyListeners());
     
@@ -24,6 +28,25 @@ class AudioPlayerController extends ChangeNotifier {
   final AudioPlayer _player = AudioPlayer();
   List<Track> _currentPlaylist = [];
   int _currentIndex = -1;
+  LibraryController? _library;
+
+  void setLibrary(LibraryController lib) {
+    _library = lib;
+  }
+
+  void _handleDurationChange(Duration? d) {
+    if (d == null || d.inSeconds == 0) return;
+    final track = currentTrack;
+    if (track != null && (track.durationSeconds == 0 || track.durationSeconds == null)) {
+      // Авто-починка: обновляем в библиотеке
+      _library?.updateTrackDuration(track.id, d.inSeconds);
+      
+      // И в текущем плейлисте плеера
+      if (_currentIndex != -1) {
+        _currentPlaylist[_currentIndex] = track.copyWith(durationSeconds: d.inSeconds);
+      }
+    }
+  }
 
   Track? get currentTrack {
     if (_currentIndex >= 0 && _currentIndex < _currentPlaylist.length) {
@@ -126,6 +149,13 @@ class AudioPlayerController extends ChangeNotifier {
   }
 
   Future<void> seek(Duration position) => _player.seek(position);
+
+  Future<void> stop() async {
+    await _player.stop();
+    _currentPlaylist = [];
+    _currentIndex = -1;
+    notifyListeners();
+  }
 
   @override
   void dispose() {

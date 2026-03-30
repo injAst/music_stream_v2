@@ -2,13 +2,25 @@ import 'package:flutter/foundation.dart';
 
 import '../data/models/user_profile.dart';
 import '../data/repositories/auth_repository.dart';
+import 'library_controller.dart';
+import 'audio_player_controller.dart';
 
 class AuthController extends ChangeNotifier {
   AuthController(this._repo);
 
   final AuthRepository _repo;
+  LibraryController? _library;
+  AudioPlayerController? _audioPlayer;
 
   UserProfile? _user;
+
+  void setLibrary(LibraryController lib) {
+    _library = lib;
+  }
+
+  void setAudioPlayer(AudioPlayerController player) {
+    _audioPlayer = player;
+  }
 
   UserProfile? get user => _user;
   bool get isLoggedIn => _user != null;
@@ -35,11 +47,6 @@ class AuthController extends ChangeNotifier {
       password: password,
       displayName: displayName,
     );
-    await _repo.register(
-      email: email,
-      password: password,
-      displayName: displayName,
-    );
     _user = await _repo.currentUser(forceRefresh: true);
     notifyListeners();
   }
@@ -53,6 +60,8 @@ class AuthController extends ChangeNotifier {
   Future<void> logout() async {
     await _repo.logout();
     _user = null;
+    _library?.clear();
+    await _audioPlayer?.stop();
     notifyListeners();
   }
 

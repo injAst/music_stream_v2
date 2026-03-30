@@ -18,6 +18,11 @@ Future<void> main() async {
   final trackRepo = TrackRepository(prefs);
   final auth = AuthController(authRepo);
   await auth.init();
+  final lib = LibraryController(trackRepo)..load();
+  final audioPlayer = AudioPlayerController();
+  auth.setLibrary(lib);
+  auth.setAudioPlayer(audioPlayer);
+  
   final router = createAppRouter(auth);
 
   runApp(
@@ -26,11 +31,11 @@ Future<void> main() async {
         Provider<AuthRepository>.value(value: authRepo),
         Provider<TrackRepository>.value(value: trackRepo),
         ChangeNotifierProvider<AuthController>.value(value: auth),
-        ChangeNotifierProvider(
-          create: (_) => AudioPlayerController(),
-        ),
-        ChangeNotifierProvider(
-          create: (c) => LibraryController(c.read<TrackRepository>())..load(),
+        ChangeNotifierProvider<LibraryController>.value(value: lib),
+        ChangeNotifierProvider<AudioPlayerController>.value(value: audioPlayer),
+        ChangeNotifierProxyProvider<LibraryController, AudioPlayerController>(
+          create: (_) => audioPlayer,
+          update: (_, library, player) => (player ?? audioPlayer)..setLibrary(library),
         ),
         ChangeNotifierProvider(
           create: (_) => NavigationController(),

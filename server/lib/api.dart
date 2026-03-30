@@ -54,7 +54,7 @@ Future<void> runServer(List<String> args) async {
   final handler = Pipeline().addMiddleware(corsHeaders()).addHandler(app);
 
   final server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
-  stdout.writeln('Pulse Music API → http://${server.address.host}:${server.port}');
+  stdout.writeln('FlowMusic API → http://${server.address.host}:${server.port}');
 }
 
 Handler _buildApp({required Session conn, required String jwtSecret}) {
@@ -65,6 +65,12 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
         body: jsonEncode(body),
         headers: {'Content-Type': 'application/json; charset=utf-8'},
       );
+
+  String _sanitizeFileName(String fileName) {
+    // Убираем всё, кроме латиницы, цифр, точек и подчёркиваний
+    final name = fileName.replaceAll(RegExp(r'\s+'), '_');
+    return name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '');
+  }
 
   String? bearer(Request req) {
     final h = req.headers['Authorization'];
@@ -129,8 +135,11 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       await for (final data in formReq.formData) {
         if (data.name == 'file') {
           final filename = data.filename ?? 'upload.mp3';
-          final ext = filename.contains('.') ? filename.split('.').last : 'mp3';
-          final newName = '${DateTime.now().millisecondsSinceEpoch}_${uid.hashCode}.$ext';
+          final sanitized = _sanitizeFileName(filename);
+          // Формат: [краткий UID]_[метка времени]_[имя_файла]
+          final prefix = uid.substring(0, 8);
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final newName = '${prefix}_${timestamp}_$sanitized';
           
           final dir = Directory('uploads/audio');
           if (!await dir.exists()) await dir.create(recursive: true);
@@ -316,9 +325,9 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
             t.stream_url,
             t.artwork_url,
             t.duration_seconds,
-            COUNT(l.user_id) AS likes_count,
+            (SELECT COUNT(*) FROM track_likes WHERE track_id = t.id) AS likes_count,
             CASE
-              WHEN @uidStr != '' AND MAX(CASE WHEN l.user_id::text = @uidStr THEN 1 ELSE 0 END) = 1
+              WHEN @uidStr != '' AND EXISTS(SELECT 1 FROM track_likes WHERE track_id = t.id AND user_id::text = @uidStr)
               THEN true ELSE false
             END AS is_liked,
             CASE
@@ -326,10 +335,8 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
               THEN true ELSE false
             END AS can_delete
           FROM tracks t
-          LEFT JOIN track_likes l ON t.id = l.track_id
           WHERE t.is_public = TRUE
              OR (@uidStr != '' AND t.owner_id IS NOT NULL AND t.owner_id::text = @uidStr)
-          GROUP BY t.id
           ORDER BY t.title
           ''',
         ),
@@ -364,6 +371,7 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       final artist = (map['artist'] as String?)?.trim() ?? '';
       final streamUrl = (map['stream_url'] as String?)?.trim() ?? '';
       final artworkUrl = (map['artwork_url'] as String?)?.trim();
+      final duration = int.tryParse(map['duration_seconds']?.toString() ?? '0') ?? 0;
       if (title.isEmpty || artist.isEmpty || streamUrl.isEmpty) {
         return jsonRes({'error': 'Заполните название, исполнителя и URL'}, status: 400);
       }
@@ -373,8 +381,8 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       final rs = await conn.execute(
         Sql.named(
           '''
-          INSERT INTO tracks (owner_id, is_public, title, artist, stream_url, artwork_url)
-          VALUES (@owner::uuid, TRUE, @title, @artist, @stream_url, @artwork)
+          INSERT INTO tracks (owner_id, is_public, title, artist, stream_url, artwork_url, duration_seconds)
+          VALUES (@owner::uuid, TRUE, @title, @artist, @stream_url, @artwork, @duration)
           RETURNING id::text AS id, title, artist, stream_url, artwork_url, duration_seconds
           ''',
         ),
@@ -384,6 +392,7 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
           'artist': artist,
           'stream_url': streamUrl,
           'artwork': artworkUrl != null && artworkUrl.isNotEmpty ? artworkUrl : null,
+          'duration': duration,
         },
       );
       final m = rs.first.toColumnMap();
@@ -470,15 +479,14 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
           '''
           SELECT
             t.id::text, t.title, t.artist, t.stream_url, t.artwork_url, t.duration_seconds,
-            COUNT(l.user_id) AS l_count,
+            (SELECT COUNT(*) FROM track_likes WHERE track_id = t.id) AS l_count,
             CASE
-              WHEN @uidStr != '' AND MAX(CASE WHEN l.user_id::text = @uidStr THEN 1 ELSE 0 END) = 1
+              WHEN @uidStr != '' AND EXISTS(SELECT 1 FROM track_likes WHERE track_id = t.id AND user_id::text = @uidStr)
               THEN true ELSE false
             END AS is_l
           FROM tracks t
-          LEFT JOIN track_likes l ON t.id = l.track_id
           WHERE (t.title ILIKE @q OR t.artist ILIKE @q) AND t.is_public = TRUE
-          GROUP BY t.id
+          ORDER BY t.title
           LIMIT 20
           ''',
         ),

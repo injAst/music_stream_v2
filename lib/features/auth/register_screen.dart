@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../providers/auth_controller.dart';
+import '../../providers/library_controller.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -38,7 +39,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
             password: _password.text,
             displayName: _name.text,
           );
-      if (mounted) context.go('/home');
+      if (mounted) {
+        await context.read<LibraryController>().load();
+        context.go('/home');
+      }
     } on AuthException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -86,7 +90,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Присоединяйтесь к Pulse Music сегодня',
+                      'Присоединяйтесь к FlowMusic сегодня',
                       style: TextStyle(color: AppTheme.textSecondary, fontSize: 15),
                     ),
                     const SizedBox(height: 32),
