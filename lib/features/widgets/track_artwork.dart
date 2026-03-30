@@ -1,6 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-
+import '../../core/config/api_config.dart';
 import '../../core/theme/app_theme.dart';
 
 class TrackArtwork extends StatelessWidget {
@@ -17,7 +17,7 @@ class TrackArtwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final u = url;
+    final u = ApiConfig.resolveUrl(url);
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: SizedBox(

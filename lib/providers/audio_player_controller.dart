@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../core/config/api_config.dart';
 import '../data/models/track.dart';
 
 class AudioPlayerController extends ChangeNotifier {
@@ -45,7 +46,7 @@ class AudioPlayerController extends ChangeNotifier {
 
   Future<void> playTrack(Track track, {List<Track>? playlist}) async {
     // Если передан плейлист, используем его, иначе создаем из одного трека
-    _currentPlaylist = playlist ?? [track];
+    _currentPlaylist = playlist != null ? List.from(playlist) : [track];
     _currentIndex = _currentPlaylist.indexOf(track);
     if (_currentIndex == -1) {
       _currentPlaylist.insert(0, track);
@@ -56,7 +57,10 @@ class AudioPlayerController extends ChangeNotifier {
 
     try {
       final source = ConcatenatingAudioSource(
-        children: _currentPlaylist.map((t) => AudioSource.uri(Uri.parse(t.streamUrl))).toList(),
+        children: _currentPlaylist.map((t) {
+          final resolved = ApiConfig.resolveUrl(t.streamUrl) ?? t.streamUrl;
+          return AudioSource.uri(Uri.parse(resolved));
+        }).toList(),
       );
       
       await _player.setAudioSource(source, initialIndex: _currentIndex);
@@ -65,6 +69,13 @@ class AudioPlayerController extends ChangeNotifier {
       debugPrint('playTrack error: $e');
       rethrow;
     }
+  }
+
+  Future<void> playWave(List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    final shuffled = List<Track>.from(tracks)..shuffle();
+    await _player.setLoopMode(LoopMode.all);
+    await playTrack(shuffled.first, playlist: shuffled);
   }
 
   Future<void> next() async {

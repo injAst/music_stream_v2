@@ -32,19 +32,24 @@ class DiscoverTab extends StatelessWidget {
             slivers: [
               SliverAppBar(
                 pinned: true,
-                backgroundColor: AppTheme.background.withValues(alpha: 0.9),
-                title: const Text(
+                floating: true,
+                backgroundColor: AppTheme.background.withValues(alpha: 0.94),
+                surfaceTintColor: Colors.transparent,
+                title: Text(
                   'Главное',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 24),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -1.0,
+                  ),
                 ),
                 actions: [
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline, color: AppTheme.textSecondary),
-                    onPressed: () => context.push('/add-track'),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.settings_outlined, color: AppTheme.textSecondary),
-                    onPressed: () {},
+                  Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    child: IconButton(
+                      icon: const Icon(Icons.add_circle_outline, color: AppTheme.textPrimary, size: 28),
+                      tooltip: 'Добавить трек',
+                      onPressed: () => context.push('/add-track'),
+                    ),
                   ),
                 ],
               ),
@@ -53,18 +58,31 @@ class DiscoverTab extends StatelessWidget {
               const SliverToBoxAdapter(child: _GlobalSearchSection()),
 
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: _buildHeroCard(context, tracks.isNotEmpty ? tracks.first : null, tracks),
+                child: Consumer<AudioPlayerController>(
+                  builder: (context, audio, _) {
+                    final currentTrack = audio.currentTrack;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: _buildHeroCard(context, currentTrack, tracks),
+                    );
+                  }
                 ),
               ),
               if (tracks.isNotEmpty) ...[
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-                    child: Text(
-                      'Специально для вас',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                    padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Специально для вас',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -74,25 +92,30 @@ class DiscoverTab extends StatelessWidget {
 
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 32, 16, 12),
+                    padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
                     child: Text(
-                      'Популярное',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                      'Популярное сегодня',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
                     ),
                   ),
                 ),
                 SliverToBoxAdapter(
                   child: SizedBox(
-                    height: 200,
+                    height: 220,
                     child: ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       scrollDirection: Axis.horizontal,
-                      itemCount: tracks.length,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: tracks.length > 10 ? 10 : tracks.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 16),
                       itemBuilder: (context, i) {
                         return _HorizontalTrackCard(
                           track: tracks[i],
                           onTap: () => context.read<AudioPlayerController>().playTrack(tracks[i], playlist: tracks),
+                          onMore: () => _showTrackOptions(context, tracks[i]),
                         );
                       },
                     ),
@@ -101,22 +124,29 @@ class DiscoverTab extends StatelessWidget {
 
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 32, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(16, 32, 16, 12),
                     child: Text(
                       'Вся коллекция',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
                     ),
                   ),
                 ),
-                SliverList.builder(
-                  itemCount: tracks.length,
-                  itemBuilder: (context, i) {
-                    final t = tracks[i];
-                    return _VerticalTrackTile(
-                      track: t,
-                      onPlay: () => context.read<AudioPlayerController>().playTrack(t, playlist: tracks),
-                    );
-                  },
+                SliverPadding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  sliver: SliverList.builder(
+                    itemCount: tracks.length,
+                    itemBuilder: (context, i) {
+                      final t = tracks[i];
+                      return _VerticalTrackTile(
+                        track: t,
+                        onPlay: () => context.read<AudioPlayerController>().playTrack(t, playlist: tracks),
+                        onMore: () => _showTrackOptions(context, t),
+                      );
+                    },
+                  ),
                 ),
               ],
               const SliverToBoxAdapter(child: SizedBox(height: 120)),
@@ -129,72 +159,115 @@ class DiscoverTab extends StatelessWidget {
 
   Widget _buildHeroCard(BuildContext context, Track? track, List<Track> tracks) {
     return Container(
-      height: 220,
+      height: 240,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        image: const DecorationImage(
-          image: AssetImage('assets/images/moya_volna.png'),
-          fit: BoxFit.cover,
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFF0E932), // AppTheme.accent
+            Color(0xFFE5DE25), // AppTheme.accentDim
+            Color(0xFF635F0A), // Darker yellow/olive
+          ],
         ),
         boxShadow: [
           BoxShadow(
-             color: AppTheme.accent.withValues(alpha: 0.1),
-             blurRadius: 30,
-             offset: const Offset(0, 5),
+             color: AppTheme.accent.withValues(alpha: 0.2),
+             blurRadius: 40,
+             offset: const Offset(0, 15),
           )
         ]
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 90,
-            child: ClipRect(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text(
-                              'Моя волна',
-                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              track != null ? '${track.title} · ${track.artist}' : 'Бесконечный поток музыки',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Material(
-                        color: AppTheme.accent,
-                        shape: const CircleBorder(),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: track != null ? () => context.read<AudioPlayerController>().playTrack(track, playlist: tracks) : null,
-                          child: const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Icon(Icons.play_arrow_rounded, size: 32, color: AppTheme.onAccent),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+          // Фоновое изображение с наложением
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.7,
+              child: Image.asset(
+                'assets/images/moya_volna.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox(),
+              ),
+            ),
+          ),
+          // Градиентное наложение для читаемости текста снизу
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.0),
+                    Colors.black.withValues(alpha: 0.7),
+                  ],
                 ),
               ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                const Text(
+                  'Моя волна',
+                  style: TextStyle(
+                    fontSize: 32, 
+                    fontWeight: FontWeight.w900, 
+                    color: Colors.white,
+                    letterSpacing: -1.0,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  track != null ? 'Сейчас играет: ${track.title}' : 'Бесконечный поток музыки под ваше настроение',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15, 
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    ElevatedButton(
+                      onPressed: tracks.isNotEmpty ? () => context.read<AudioPlayerController>().playWave(tracks) : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size(120, 44),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.play_arrow_rounded, size: 24),
+                          SizedBox(width: 8),
+                          Text('Слушать', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      onPressed: track != null ? () => context.read<LibraryController>().toggleLike(track.id) : null,
+                      icon: Icon(
+                        track != null && track.isLiked ? Icons.favorite : Icons.favorite_border_rounded, 
+                        color: Colors.white
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -202,18 +275,101 @@ class DiscoverTab extends StatelessWidget {
     );
   }
 
+  void _showTrackOptions(BuildContext context, Track track) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  TrackArtwork(url: track.artworkUrl, size: 56, radius: 4),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(track.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              leading: Icon(track.isLiked ? Icons.favorite : Icons.favorite_border, 
+                color: track.isLiked ? AppTheme.accent : AppTheme.textSecondary),
+              title: Text(track.isLiked ? 'Удалить из любимых' : 'Добавить в любимые'),
+              onTap: () {
+                Navigator.pop(context);
+                context.read<LibraryController>().toggleLike(track.id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.playlist_add),
+              title: const Text('Добавить в плейлист'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.share_outlined),
+              title: const Text('Поделиться'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMixesRow() {
     return SizedBox(
-      height: 140,
+      height: 160,
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         scrollDirection: Axis.horizontal,
-        children: const [
-          _MixCard(title: 'Энергичный', imagePath: 'assets/images/energy_mix.png'),
-          SizedBox(width: 16),
-          _MixCard(title: 'Хип-хоп', imagePath: 'assets/images/hip_hop_mix.png'),
-          SizedBox(width: 16),
-          _MixCard(title: 'Танцевальный', imagePath: 'assets/images/moya_volna.png'),
+        physics: const BouncingScrollPhysics(),
+        children: [
+          _MixCard(
+            title: 'Энергия', 
+            subtitle: 'Бодрые треки', 
+            color: const Color(0xFFFF5722),
+            icon: Icons.bolt_rounded,
+          ),
+          const SizedBox(width: 12),
+          _MixCard(
+            title: 'Хип-хоп', 
+            subtitle: 'Ритм улиц', 
+            color: const Color(0xFF2196F3),
+            icon: Icons.mic_external_on_rounded,
+          ),
+          const SizedBox(width: 12),
+          _MixCard(
+            title: 'Танцы', 
+            subtitle: 'Зажигай', 
+            color: const Color(0xFFE91E63),
+            icon: Icons.nightlife_rounded,
+          ),
+          const SizedBox(width: 12),
+          _MixCard(
+            title: 'Релакс', 
+            subtitle: 'Спокойствие', 
+            color: const Color(0xFF4CAF50),
+            icon: Icons.spa_rounded,
+          ),
         ],
       ),
     );
@@ -221,32 +377,65 @@ class DiscoverTab extends StatelessWidget {
 }
 
 class _MixCard extends StatelessWidget {
-  const _MixCard({required this.title, required this.imagePath});
+  const _MixCard({
+    required this.title, 
+    required this.subtitle, 
+    required this.color,
+    required this.icon,
+  });
+  
   final String title;
-  final String imagePath;
+  final String subtitle;
+  final Color color;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 140,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        image: DecorationImage(image: AssetImage(imagePath), fit: BoxFit.cover),
-      ),
+    return InkWell(
+      onTap: () {
+        // TODO: Navigation or Filter
+      },
+      borderRadius: BorderRadius.circular(20),
       child: Container(
+        width: 140,
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           gradient: LinearGradient(
-             begin: Alignment.topCenter,
-             end: Alignment.bottomCenter,
-             colors: [Colors.transparent, Colors.black.withValues(alpha: 0.8)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color.withValues(alpha: 0.8),
+              color,
+            ],
           ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            )
+          ]
         ),
-        padding: const EdgeInsets.all(12),
-        alignment: Alignment.bottomLeft,
-        child: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Icon(icon, color: Colors.white, size: 32),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.white),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -254,10 +443,15 @@ class _MixCard extends StatelessWidget {
 }
 
 class _HorizontalTrackCard extends StatelessWidget {
-  const _HorizontalTrackCard({required this.track, required this.onTap});
+  const _HorizontalTrackCard({
+    required this.track, 
+    required this.onTap,
+    required this.onMore,
+  });
 
   final Track track;
   final VoidCallback onTap;
+  final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -286,19 +480,33 @@ class _HorizontalTrackCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              track.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              track.artist,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        track.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        track.artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: onMore,
+                  child: const Icon(Icons.more_vert, size: 18, color: AppTheme.textSecondary),
+                ),
+              ],
             ),
           ],
         ),
@@ -308,10 +516,15 @@ class _HorizontalTrackCard extends StatelessWidget {
 }
 
 class _VerticalTrackTile extends StatelessWidget {
-  const _VerticalTrackTile({required this.track, required this.onPlay});
+  const _VerticalTrackTile({
+    required this.track, 
+    required this.onPlay,
+    required this.onMore,
+  });
 
   final Track track;
   final VoidCallback onPlay;
+  final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -321,30 +534,34 @@ class _VerticalTrackTile extends StatelessWidget {
 
     return InkWell(
       onTap: onPlay,
-      child: Padding(
+      splashColor: AppTheme.accent.withValues(alpha: 0.1),
+      child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isPlayingThis ? AppTheme.accent.withValues(alpha: 0.05) : Colors.transparent,
+        ),
         child: Row(
           children: [
             SizedBox(
-              width: 48,
-              height: 48,
+              width: 52,
+              height: 52,
               child: Stack(
                 children: [
-                  TrackArtwork(url: track.artworkUrl, size: 48, radius: 6),
-                  if (isPlayingThis)
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Center(
-                        child: Icon(Icons.volume_up_rounded, color: AppTheme.textPrimary, size: 24),
-                      ),
-                    ),
+                   TrackArtwork(url: track.artworkUrl, size: 52, radius: 8),
+                   if (isPlayingThis)
+                     Container(
+                       decoration: BoxDecoration(
+                         color: Colors.black.withValues(alpha: 0.6),
+                         borderRadius: BorderRadius.circular(8),
+                       ),
+                       child: const Center(
+                         child: Icon(Icons.volume_up_rounded, color: AppTheme.accent, size: 24),
+                       ),
+                     ),
                 ],
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,16 +570,17 @@ class _VerticalTrackTile extends StatelessWidget {
                      track.title,
                      style: TextStyle(
                        fontSize: 16, 
-                       fontWeight: isPlayingThis ? FontWeight.bold : FontWeight.normal,
+                       fontWeight: isPlayingThis ? FontWeight.bold : FontWeight.w600,
                        color: isPlayingThis ? AppTheme.accent : AppTheme.textPrimary,
+                       letterSpacing: -0.3,
                      ),
                      maxLines: 1, 
                      overflow: TextOverflow.ellipsis,
                    ),
-                   const SizedBox(height: 4),
+                   const SizedBox(height: 2),
                    Text(
                      track.artist,
-                     style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+                     style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
                      maxLines: 1, 
                      overflow: TextOverflow.ellipsis,
                    ),
@@ -373,13 +591,13 @@ class _VerticalTrackTile extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                  IconButton(
-                   icon: Icon(track.isLiked ? Icons.favorite : Icons.favorite_border, size: 22),
-                   color: track.isLiked ? Colors.redAccent : AppTheme.textSecondary,
+                   icon: Icon(track.isLiked ? Icons.favorite : Icons.favorite_border, size: 20),
+                   color: track.isLiked ? AppTheme.accent : AppTheme.textSecondary,
                    onPressed: () => context.read<LibraryController>().toggleLike(track.id),
                  ),
                  IconButton(
-                   icon: const Icon(Icons.more_horiz, size: 22, color: AppTheme.textSecondary),
-                   onPressed: () {},
+                   icon: const Icon(Icons.more_vert, size: 20, color: AppTheme.textSecondary),
+                   onPressed: onMore,
                  )
               ],
             )
@@ -471,11 +689,11 @@ class _GlobalSearchSectionState extends State<_GlobalSearchSection> {
             controller: _controller,
             onChanged: _onChanged,
             decoration: InputDecoration(
-              hintText: 'Найти музыку или друзей...',
-              prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textSecondary),
+              hintText: 'Найти музыку или людей...',
+              prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textSecondary, size: 22),
               suffixIcon: _active
                   ? IconButton(
-                      icon: const Icon(Icons.close, color: AppTheme.textSecondary),
+                      icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20),
                       onPressed: () {
                         _controller.clear();
                         setState(() {
@@ -489,18 +707,18 @@ class _GlobalSearchSectionState extends State<_GlobalSearchSection> {
                   : null,
               filled: true,
               fillColor: AppTheme.surfaceHighlight,
-              contentPadding: EdgeInsets.zero,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(24),
-                borderSide: const BorderSide(color: AppTheme.accent, width: 1.5),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppTheme.accent, width: 1.0),
               ),
             ),
           ),
