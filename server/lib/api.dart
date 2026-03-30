@@ -374,7 +374,7 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
         Sql.named(
           '''
           INSERT INTO tracks (owner_id, is_public, title, artist, stream_url, artwork_url)
-          VALUES (@owner::uuid, FALSE, @title, @artist, @stream_url, @artwork)
+          VALUES (@owner::uuid, TRUE, @title, @artist, @stream_url, @artwork)
           RETURNING id::text AS id, title, artist, stream_url, artwork_url, duration_seconds
           ''',
         ),
