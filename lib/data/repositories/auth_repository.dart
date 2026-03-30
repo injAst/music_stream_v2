@@ -15,6 +15,7 @@ class AuthRepository {
 
   final SharedPreferences _prefs;
   static const _tokenKey = 'ms_auth_token_v1';
+  static const _userKey = 'ms_user_profile_v1';
 
   String? get currentToken => _prefs.getString(_tokenKey);
 
@@ -23,6 +24,36 @@ class AuthRepository {
     final t = token ?? currentToken;
     if (t != null) h['Authorization'] = 'Bearer $t';
     return h;
+  }
+
+  void _saveLocalUser(UserProfile user) {
+    final map = {
+      'id': user.id,
+      'email': user.email,
+      'display_name': user.displayName,
+      'avatar_url': user.avatarUrl,
+    };
+    _prefs.setString(_userKey, jsonEncode(map));
+  }
+
+  UserProfile? _loadLocalUser() {
+    final jsonStr = _prefs.getString(_userKey);
+    if (jsonStr == null) return null;
+    try {
+      final map = jsonDecode(jsonStr);
+      return UserProfile(
+        id: map['id']?.toString() ?? '',
+        email: map['email'] ?? '',
+        displayName: map['display_name'] ?? '',
+        avatarUrl: map['avatar_url'],
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  void _clearLocalUser() {
+    _prefs.remove(_userKey);
   }
 
   void _handleError(http.Response res) {
@@ -36,8 +67,14 @@ class AuthRepository {
     throw AuthException('Ошибка сервера: ${res.statusCode}');
   }
 
-  Future<UserProfile?> currentUser() async {
+  Future<UserProfile?> currentUser({bool forceRefresh = false}) async {
     final token = currentToken;
+    
+    if (!forceRefresh) {
+      final cached = _loadLocalUser();
+      if (cached != null) return cached;
+    }
+
     if (token == null) return null;
 
     try {
@@ -46,18 +83,20 @@ class AuthRepository {
         headers: _headers(token),
       );
       if (res.statusCode == 401) {
-        await logout(); // Token expired or invalid
+        await logout(); 
         return null;
       }
       _handleError(res);
       final body = jsonDecode(res.body);
       final u = body['user'];
-      return UserProfile(
+      final user = UserProfile(
         id: u['id']?.toString() ?? '',
         email: u['email'] ?? '',
         displayName: u['display_name'] ?? '',
         avatarUrl: u['avatar_url'],
       );
+      _saveLocalUser(user);
+      return user;
     } catch (e) {
       return null;
     }
@@ -95,6 +134,7 @@ class AuthRepository {
 
   Future<void> logout() async {
     await _prefs.remove(_tokenKey);
+    _clearLocalUser();
   }
 
   Future<void> updateProfile({

@@ -14,8 +14,15 @@ class AuthController extends ChangeNotifier {
   bool get isLoggedIn => _user != null;
 
   Future<void> init() async {
+    // Мгновенная загрузка из кэша
     _user = await _repo.currentUser();
     notifyListeners();
+
+    // Фоновое обновление с сервера для проверки актуальности сессии
+    if (isLoggedIn) {
+      _user = await _repo.currentUser(forceRefresh: true);
+      notifyListeners();
+    }
   }
 
   Future<void> register({
@@ -28,13 +35,18 @@ class AuthController extends ChangeNotifier {
       password: password,
       displayName: displayName,
     );
-    _user = await _repo.currentUser();
+    await _repo.register(
+      email: email,
+      password: password,
+      displayName: displayName,
+    );
+    _user = await _repo.currentUser(forceRefresh: true);
     notifyListeners();
   }
 
   Future<void> login({required String email, required String password}) async {
     await _repo.login(email: email, password: password);
-    _user = await _repo.currentUser();
+    _user = await _repo.currentUser(forceRefresh: true);
     notifyListeners();
   }
 
@@ -45,7 +57,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> refreshProfile() async {
-    _user = await _repo.currentUser();
+    _user = await _repo.currentUser(forceRefresh: true);
     notifyListeners();
   }
 
@@ -59,7 +71,7 @@ class AuthController extends ChangeNotifier {
       avatarUrl: avatarUrl,
       clearAvatar: clearAvatar,
     );
-    _user = await _repo.currentUser();
+    _user = await _repo.currentUser(forceRefresh: true);
     notifyListeners();
   }
 }
