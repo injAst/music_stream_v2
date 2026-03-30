@@ -1,17 +1,24 @@
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../core/config/api_config.dart';
 import '../data/models/track.dart';
+import '../data/repositories/auth_repository.dart';
 import 'library_controller.dart';
 
 class AudioPlayerController extends ChangeNotifier {
-  AudioPlayerController() {
+  AudioPlayerController(this._prefs) {
+    // Восстанавливаем громкость
+    final savedVolume = _prefs.getDouble(_volumeKey) ?? 1.0;
+    _player.setVolume(savedVolume);
+
     _player.playerStateStream.listen((_) => notifyListeners());
     _player.positionStream.listen((_) => notifyListeners());
     _player.durationStream.listen((d) {
-       _handleDurationChange(d);
-       notifyListeners();
+      _handleDurationChange(d);
+      notifyListeners();
     });
     _player.shuffleModeEnabledStream.listen((_) => notifyListeners());
     _player.loopModeStream.listen((_) => notifyListeners());
@@ -23,15 +30,43 @@ class AudioPlayerController extends ChangeNotifier {
         notifyListeners();
       }
     });
+
+    // Слушаем изменение громкости
+    _player.volumeStream.listen((_) => notifyListeners());
   }
 
   final AudioPlayer _player = AudioPlayer();
+  final SharedPreferences _prefs;
+  static const _volumeKey = 'ms_volume_v1';
   List<Track> _currentPlaylist = [];
   int _currentIndex = -1;
   LibraryController? _library;
+  AuthRepository? _authRepo;
+  DateTime? _lastPlayedAt;
 
   void setLibrary(LibraryController lib) {
     _library = lib;
+  }
+
+  void setAuthRepo(AuthRepository repo) {
+    _authRepo = repo;
+  }
+
+  DateTime? get lastPlayedAt => _lastPlayedAt;
+
+  void setInitialTrack(Track track, DateTime? at) {
+    // Устанавливаем, только если плеер пуст
+    if (_currentIndex == -1 || _currentPlaylist.isEmpty) {
+      _currentPlaylist = [track];
+      _currentIndex = 0;
+      _lastPlayedAt = at;
+      
+      // Настраиваем плеер без авто-запуска
+      final resolved = ApiConfig.resolveUrl(track.streamUrl) ?? track.streamUrl;
+      _player.setAudioSource(AudioSource.uri(Uri.parse(resolved)), preload: true);
+      
+      notifyListeners();
+    }
   }
 
   void _handleDurationChange(Duration? d) {
@@ -67,6 +102,13 @@ class AudioPlayerController extends ChangeNotifier {
   bool get hasNext => _player.hasNext;
   bool get hasPrevious => _player.hasPrevious;
 
+  double get volume => _player.volume;
+  Future<void> setVolume(double value) async {
+    await _player.setVolume(value);
+    await _prefs.setDouble(_volumeKey, value);
+    notifyListeners();
+  }
+
   Future<void> playTrack(Track track, {List<Track>? playlist}) async {
     // Если передан плейлист, используем его, иначе создаем из одного трека
     _currentPlaylist = playlist != null ? List.from(playlist) : [track];
@@ -76,7 +118,11 @@ class AudioPlayerController extends ChangeNotifier {
       _currentIndex = 0;
     }
 
+    _lastPlayedAt = DateTime.now();
     notifyListeners();
+    
+    // Синхронизация с сервером
+    _authRepo?.updateLastTrack(track.id);
 
     try {
       final source = ConcatenatingAudioSource(

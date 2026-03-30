@@ -100,6 +100,11 @@ class LibraryController extends ChangeNotifier {
       if (_tracks[idx].durationSeconds == 0 || _tracks[idx].durationSeconds == null) {
         _tracks[idx] = _tracks[idx].copyWith(durationSeconds: seconds);
         notifyListeners();
+
+        // Фоновое сохранение на сервер
+        _repo.patchTrackDuration(id, seconds).catchError((e) {
+          debugPrint('Failed to sync duration to server: $e');
+        });
       }
     }
   }

@@ -98,6 +98,19 @@ class TrackRepository {
     _handleError(res);
   }
 
+  Future<void> patchTrackDuration(String id, int seconds) async {
+    try {
+      final res = await http.patch(
+        Uri.parse('${ApiConfig.baseUrl}/tracks/$id'),
+        headers: _headers(),
+        body: jsonEncode({'duration_seconds': seconds}),
+      );
+      _handleError(res);
+    } catch (e) {
+      debugPrint('Error patching duration: $e');
+    }
+  }
+
   Future<void> likeTrack(String id) async {
     final res = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/tracks/$id/like'),

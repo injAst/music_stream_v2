@@ -27,26 +27,14 @@ class AuthRepository {
   }
 
   void _saveLocalUser(UserProfile user) {
-    final map = {
-      'id': user.id,
-      'email': user.email,
-      'display_name': user.displayName,
-      'avatar_url': user.avatarUrl,
-    };
-    _prefs.setString(_userKey, jsonEncode(map));
+    _prefs.setString(_userKey, jsonEncode(user.toJson()));
   }
 
   UserProfile? _loadLocalUser() {
     final jsonStr = _prefs.getString(_userKey);
     if (jsonStr == null) return null;
     try {
-      final map = jsonDecode(jsonStr);
-      return UserProfile(
-        id: map['id']?.toString() ?? '',
-        email: map['email'] ?? '',
-        displayName: map['display_name'] ?? '',
-        avatarUrl: map['avatar_url'],
-      );
+      return UserProfile.fromJson(jsonDecode(jsonStr));
     } catch (e) {
       return null;
     }
@@ -89,11 +77,15 @@ class AuthRepository {
       _handleError(res);
       final body = jsonDecode(res.body);
       final u = body['user'];
+      final lt = body['last_track'];
+      
       final user = UserProfile(
         id: u['id']?.toString() ?? '',
         email: u['email'] ?? '',
         displayName: u['display_name'] ?? '',
         avatarUrl: u['avatar_url'],
+        lastTrack: lt as Map<String, dynamic>?,
+        lastPlayedAt: u['last_played_at']?.toString(),
       );
       _saveLocalUser(user);
       return user;
@@ -153,5 +145,39 @@ class AuthRepository {
       }),
     );
     _handleError(res);
+  }
+
+  Future<Map<String, dynamic>?> fetchMe() async {
+    final token = currentToken;
+    if (token == null) return null;
+    try {
+      final res = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/me'),
+        headers: _headers(token),
+      );
+      if (res.statusCode == 401) {
+        await logout();
+        return null;
+      }
+      _handleError(res);
+      return jsonDecode(res.body) as Map<String, dynamic>;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<void> updateLastTrack(String trackId) async {
+    final token = currentToken;
+    if (token == null) return;
+    try {
+      final res = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/me/state'),
+        headers: _headers(token),
+        body: jsonEncode({'track_id': trackId}),
+      );
+      _handleError(res);
+    } catch (e) {
+      print('DEBUG: updateLastTrack error: $e');
+    }
   }
 }

@@ -199,6 +199,47 @@ class _PlayerControls extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 32),
+        _VolumeControl(audio: audio),
+      ],
+    );
+  }
+}
+
+class _VolumeControl extends StatelessWidget {
+  final AudioPlayerController audio;
+  const _VolumeControl({required this.audio});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(
+          audio.volume == 0 ? Icons.volume_off_rounded : Icons.volume_down_rounded,
+          color: AppTheme.textSecondary,
+          size: 20,
+        ),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+              activeTrackColor: AppTheme.textPrimary.withValues(alpha: 0.8),
+              inactiveTrackColor: AppTheme.surfaceHighlight,
+              thumbColor: AppTheme.textPrimary,
+            ),
+            child: Slider(
+              value: audio.volume,
+              onChanged: (v) => audio.setVolume(v),
+            ),
+          ),
+        ),
+        const Icon(
+          Icons.volume_up_rounded,
+          color: AppTheme.textSecondary,
+          size: 20,
+        ),
       ],
     );
   }

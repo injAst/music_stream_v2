@@ -101,6 +101,7 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       'email': m['email'],
       'display_name': m['display_name'],
       'avatar_url': m['avatar_url'],
+      'last_played_at': m['last_played_at']?.toString(),
     };
   }
 
@@ -245,14 +246,57 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       final rs = await conn.execute(
         Sql.named(
           '''
-          SELECT id::text AS id, email, display_name, avatar_url
-          FROM app_users WHERE id = @id::uuid
+          SELECT 
+            u.id::text AS id, u.email, u.display_name, u.avatar_url, u.last_played_at,
+            t.id::text AS t_id, t.title AS t_title, t.artist AS t_artist, 
+            t.stream_url AS t_stream, t.artwork_url AS t_artwork, t.duration_seconds AS t_dur
+          FROM app_users u
+          LEFT JOIN tracks t ON u.last_played_track_id = t.id
+          WHERE u.id = @id::uuid
           ''',
         ),
         parameters: {'id': uid},
       );
       if (rs.isEmpty) return jsonRes({'error': 'Пользователь не найден'}, status: 404);
-      return jsonRes({'user': userJson(rs.first)});
+      
+      final row = rs.first;
+      final m = row.toColumnMap();
+      final user = userJson(row);
+      
+      Map<String, dynamic>? lastTrack;
+      if (m['t_id'] != null) {
+        lastTrack = {
+          'id': m['t_id'].toString(),
+          'title': m['t_title'],
+          'artist': m['t_artist'],
+          'stream_url': m['t_stream'],
+          'artwork_url': m['t_artwork'],
+          'duration_seconds': m['t_dur'],
+        };
+      }
+
+      return jsonRes({
+        'user': user,
+        'last_track': lastTrack,
+      });
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  router.post('/v1/me/state', (Request req) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Не авторизован'}, status: 401);
+    try {
+      final body = jsonDecode(await req.readAsString());
+      final trackId = body['track_id'] as String?;
+      if (trackId == null) return jsonRes({'error': 'track_id required'}, status: 400);
+
+      await conn.execute(
+        Sql.named('UPDATE app_users SET last_played_track_id = @tid::uuid, last_played_at = NOW() WHERE id = @uid::uuid'),
+        parameters: {'tid': trackId, 'uid': uid},
+      );
+      return jsonRes({'ok': true});
     } catch (e) {
       return jsonRes({'error': e.toString()}, status: 500);
     }
@@ -434,6 +478,26 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       if (rs.isEmpty) {
         return jsonRes({'error': 'Трек не найден или нет прав'}, status: 404);
       }
+      return jsonRes({'ok': true});
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  router.patch('/v1/tracks/<id>', (Request req, String id) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Нужна авторизация'}, status: 401);
+    try {
+      final body = jsonDecode(await req.readAsString());
+      final duration = body['duration_seconds'];
+      if (duration == null || duration is! int) {
+        return jsonRes({'error': 'Некорректная длительность'}, status: 400);
+      }
+
+      await conn.execute(
+        Sql.named('UPDATE tracks SET duration_seconds = @dur WHERE id = @tid::uuid AND (duration_seconds IS NULL OR duration_seconds = 0)'),
+        parameters: {'dur': duration, 'tid': id},
+      );
       return jsonRes({'ok': true});
     } catch (e) {
       return jsonRes({'error': e.toString()}, status: 500);

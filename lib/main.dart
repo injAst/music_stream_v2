@@ -19,9 +19,10 @@ Future<void> main() async {
   final auth = AuthController(authRepo);
   await auth.init();
   final lib = LibraryController(trackRepo)..load();
-  final audioPlayer = AudioPlayerController();
+  final audioPlayer = AudioPlayerController(prefs);
   auth.setLibrary(lib);
   auth.setAudioPlayer(audioPlayer);
+  audioPlayer.setAuthRepo(authRepo);
   
   final router = createAppRouter(auth);
 
