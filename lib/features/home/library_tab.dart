@@ -195,12 +195,29 @@ class _LibraryTabState extends State<LibraryTab> {
                 ),
               ),
               const Spacer(),
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: AppTheme.surfaceHighlight,
-                child: ClipOval(
+              GestureDetector(
+                onTap: () => context.push('/profile'),
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3), width: 2),
+                    color: AppTheme.surfaceHighlight,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
                   child: context.read<AuthController>().user?.avatarUrl != null 
-                    ? Image.network(ApiConfig.resolveUrl(context.read<AuthController>().user?.avatarUrl)!)
+                    ? Image.network(
+                        ApiConfig.resolveUrl(context.read<AuthController>().user?.avatarUrl)!,
+                        fit: BoxFit.cover,
+                      )
                     : const Icon(Icons.person, color: AppTheme.textSecondary),
                 ),
               ),
