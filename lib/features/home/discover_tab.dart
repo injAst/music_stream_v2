@@ -38,14 +38,29 @@ class DiscoverTab extends StatelessWidget {
           }
           final tracks = lib.tracks;
 
-          // Логика "Новых релизов": 7 дней или 5 последних (fallback)
+          // Логика "Новых релизов": 7 дней или 6 последних (fallback)
           final weekAgo = DateTime.now().subtract(const Duration(days: 7));
           var newReleases = tracks.where((t) => t.createdAt != null && t.createdAt!.isAfter(weekAgo)).toList();
-          
+
           // Если за неделю ничего не вышло — показываем 6 последних добавленных
           if (newReleases.isEmpty) {
             newReleases = tracks.take(6).toList();
           }
+
+          // Логика "В тренде": Хайп-рейтинг (лайки + свежесть) + лимит 100 во вкладке "Все"
+          final trendingTracks = List<Track>.from(tracks)..sort((a, b) {
+            double getScore(Track t) {
+              final age = t.createdAt != null 
+                ? DateTime.now().difference(t.createdAt!).inDays 
+                : 30; // 30 дней по умолчанию, если даты нет
+              // Формула: Лайки делим на возраст (сглаженный), чтобы новые треки быстрее выходили в топ
+              return (t.likesCount + 1) / (age + 2);
+            }
+            return getScore(b).compareTo(getScore(a));
+          });
+          
+          final trendingAll = trendingTracks.take(100).toList();
+          final trendingHome = trendingTracks.take(8).toList();
 
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
@@ -94,7 +109,7 @@ class DiscoverTab extends StatelessWidget {
                 ),
 
                 _buildSectionHeader(context, 'В тренде', () {
-                   _showAllTracks(context, 'В тренде', tracks);
+                   _showAllTracks(context, 'В тренде', trendingAll);
                 }),
                 SliverToBoxAdapter(
                   child: SizedBox(
@@ -103,12 +118,12 @@ class DiscoverTab extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       scrollDirection: Axis.horizontal,
                       physics: const BouncingScrollPhysics(),
-                      itemCount: tracks.length > 8 ? 8 : tracks.length,
+                      itemCount: trendingHome.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 16),
                       itemBuilder: (context, i) {
                         return _TrendingTrackCard(
-                          track: tracks[i],
-                          onTap: () => context.read<AudioPlayerController>().playTrack(tracks[i], playlist: tracks),
+                          track: trendingHome[i],
+                          onTap: () => context.read<AudioPlayerController>().playTrack(trendingHome[i], playlist: trendingHome),
                         );
                       },
                     ),
@@ -455,15 +470,7 @@ class _FlowHeroState extends State<_FlowHero> with TickerProviderStateMixin {
                           children: [
                              const Icon(Icons.auto_awesome, color: AppTheme.accent, size: 14),
                              const SizedBox(width: 8),
-                             Text(
-                              'ETERNAL FLOW ENGINE 3.1',
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white.withValues(alpha: 0.7),
-                                letterSpacing: 2.5,
-                              ),
-                            ),
+                             Expanded(child: Text('ETERNAL FLOW ENGINE 3.1', style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white.withValues(alpha: 0.7), letterSpacing: 2.5,), maxLines: 1, overflow: TextOverflow.ellipsis,),),
                           ],
                         ),
                         const SizedBox(height: 20),
@@ -476,6 +483,8 @@ class _FlowHeroState extends State<_FlowHero> with TickerProviderStateMixin {
                             letterSpacing: -1.5,
                             height: 0.9,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -485,6 +494,8 @@ class _FlowHeroState extends State<_FlowHero> with TickerProviderStateMixin {
                             fontWeight: FontWeight.w500,
                             color: Colors.white.withValues(alpha: 0.4),
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -1174,3 +1185,4 @@ class _GlobalSearchSectionState extends State<_GlobalSearchSection> {
     );
   }
 }
+
