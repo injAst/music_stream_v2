@@ -38,13 +38,17 @@ class DiscoverTab extends StatelessWidget {
           }
           final tracks = lib.tracks;
 
-          // Логика "Новых релизов": 7 дней или 6 последних (fallback)
+          // Логика "Новых релизов": 7 дней или все последние (без лимита в 6 штук)
           final weekAgo = DateTime.now().subtract(const Duration(days: 7));
           var newReleases = tracks.where((t) => t.createdAt != null && t.createdAt!.isAfter(weekAgo)).toList();
 
-          // Если за неделю ничего не вышло — показываем 6 последних добавленных
+          // Если за неделю ничего не вышло — показываем последние добавленные (сортируем по дате)
           if (newReleases.isEmpty) {
-            newReleases = tracks.take(6).toList();
+            newReleases = List<Track>.from(tracks)..sort((a, b) {
+              final da = a.createdAt ?? DateTime(2000);
+              final db = b.createdAt ?? DateTime(2000);
+              return db.compareTo(da);
+            });
           }
 
           // Логика "В тренде": Хайп-рейтинг (лайки + свежесть) + лимит 100 во вкладке "Все"
@@ -59,8 +63,8 @@ class DiscoverTab extends StatelessWidget {
             return getScore(b).compareTo(getScore(a));
           });
           
-          final trendingAll = trendingTracks.take(100).toList();
-          final trendingHome = trendingTracks.take(8).toList();
+          final trendingAll = trendingTracks.take(100).toList(); // Вернули лимит в 100 треков
+          final trendingHome = trendingTracks.take(8).toList(); // Вернули 8 на главном экране
 
           // Логика "Рекомендаций": Похожие по артистам + Популярное (Discovery Mode)
           final likedTracks = tracks.where((t) => t.isLiked).toList();
@@ -80,8 +84,8 @@ class DiscoverTab extends StatelessWidget {
           
           // 3. Перемешиваем для эффекта открытия и ограничиваем списки
           recommended.shuffle();
-          final recommendationsHome = recommended.take(10).toList();
-          final recommendationsAll = recommended.take(60).toList();
+          final recommendationsHome = recommended.take(12).toList();
+          final recommendationsAll = recommended; // Убрали лимит в 60 треков
 
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
