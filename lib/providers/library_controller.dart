@@ -16,6 +16,18 @@ class LibraryController extends ChangeNotifier {
   List<Track> get tracks => List.unmodifiable(_tracks);
   bool get isLoading => _loading;
 
+  Future<String> uploadArtwork({
+    File? file,
+    List<int>? bytes,
+    required String filename,
+  }) {
+    return _repo.uploadArtwork(
+      file: file,
+      bytes: bytes,
+      filename: filename,
+    );
+  }
+
   Future<void> load() async {
     _loading = true;
     notifyListeners();
@@ -61,8 +73,34 @@ class LibraryController extends ChangeNotifier {
     await load();
   }
 
+  Future<void> deleteAllTracks() async {
+    _loading = true;
+    notifyListeners();
+    try {
+      final tracksToDelete = List<Track>.from(_tracks);
+      for (final track in tracksToDelete) {
+        try {
+          await _repo.removeTrack(track.id);
+        } catch (e) {
+          if (!e.toString().contains('404')) rethrow;
+        }
+      }
+      _tracks = [];
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> removeTrack(String id) async {
-    await _repo.removeTrack(id);
+    try {
+      await _repo.removeTrack(id);
+    } catch (e) {
+      // Если трек уже удален (404), считаем это успехом.
+      // Проверяем как код ошибки, так и текст "404"
+      final err = e.toString();
+      if (!err.contains('404') && !err.contains('Not Found')) rethrow;
+    }
     await load();
   }
 
@@ -93,6 +131,40 @@ class LibraryController extends ChangeNotifier {
     }
   }
 
+  Future<void> updateTrackMetadata({
+    required String id,
+    String? title,
+    String? artist,
+    String? artworkUrl,
+  }) async {
+    final idx = _tracks.indexWhere((t) => t.id == id);
+    if (idx == -1) return;
+
+    final oldTrack = _tracks[idx];
+    
+    // Оптимистичное обновление
+    _tracks[idx] = oldTrack.copyWith(
+      title: title,
+      artist: artist,
+      artworkUrl: artworkUrl,
+    );
+    notifyListeners();
+
+    try {
+      await _repo.updateTrack(
+        id: id,
+        title: title,
+        artist: artist,
+        artworkUrl: artworkUrl,
+      );
+    } catch (e) {
+      // Откат при ошибке
+      _tracks[idx] = oldTrack;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   void updateTrackDuration(String id, int seconds) {
     if (seconds <= 0) return;
     final idx = _tracks.indexWhere((t) => t.id == id);
@@ -102,8 +174,12 @@ class LibraryController extends ChangeNotifier {
         notifyListeners();
 
         // Фоновое сохранение на сервер
-        _repo.patchTrackDuration(id, seconds).catchError((e) {
-          debugPrint('Failed to sync duration to server: $e');
+        _repo.updateTrack(id: id, durationSeconds: seconds).then((_) {
+          // Success
+        }).catchError((e) {
+          if (!e.toString().contains('404')) {
+            debugPrint('Failed to sync duration to server: $e');
+          }
         });
       }
     }

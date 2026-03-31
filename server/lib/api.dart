@@ -12,6 +12,7 @@ import 'package:shelf_cors_headers/shelf_cors_headers.dart';
 import 'package:shelf_multipart/shelf_multipart.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_static/shelf_static.dart';
+import 'package:http/http.dart' as http;
 
 Future<void> runServer(List<String> args) async {
   final dotEnv = DotEnv(includePlatformEnvironment: true)..load();
@@ -513,14 +514,15 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
         Sql.named(
           r'''
           DELETE FROM tracks
-          WHERE id = @tid::uuid AND owner_id = @uid::uuid AND is_public = FALSE
+          WHERE id = @tid::uuid AND owner_id = @uid::uuid
           RETURNING id
           ''',
         ),
         parameters: {'tid': id, 'uid': uid},
       );
       if (rs.isEmpty) {
-        return jsonRes({'error': 'Трек не найден или нет прав'}, status: 404);
+        // Идемпотентность: если трек уже удален, возвращаем 200, чтобы не спамить 404 в консоль
+        return jsonRes({'ok': true, 'message': 'Трек уже удален или нет прав'});
       }
       return jsonRes({'ok': true});
     } catch (e) {
@@ -533,15 +535,57 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
     if (uid == null) return jsonRes({'error': 'Нужна авторизация'}, status: 401);
     try {
       final body = jsonDecode(await req.readAsString());
-      final duration = body['duration_seconds'];
-      if (duration == null || duration is! int) {
-        return jsonRes({'error': 'Некорректная длительность'}, status: 400);
+      
+      // 1. Проверяем существование трека и владельца
+      final rs = await conn.execute(
+        Sql.named('SELECT owner_id::text FROM tracks WHERE id = @tid::uuid'),
+        parameters: {'tid': id},
+      );
+      if (rs.isEmpty) return jsonRes({'error': 'Трек не найден'}, status: 404);
+      final ownerId = rs.first[0]?.toString();
+      final isOwner = ownerId != null && ownerId == uid;
+
+      final updates = <String>[];
+      final params = <String, dynamic>{'tid': id};
+
+      // Поля, которые может менять только владелец
+      if (isOwner) {
+        if (body.containsKey('title')) {
+          updates.add('title = @title');
+          params['title'] = body['title']?.toString().trim() ?? '';
+        }
+        if (body.containsKey('artist')) {
+          updates.add('artist = @artist');
+          params['artist'] = body['artist']?.toString().trim() ?? '';
+        }
+        if (body.containsKey('artwork_url')) {
+          updates.add('artwork_url = @artwork');
+          params['artwork'] = body['artwork_url']?.toString().trim();
+        }
       }
 
-      await conn.execute(
-        Sql.named('UPDATE tracks SET duration_seconds = @dur WHERE id = @tid::uuid AND (duration_seconds IS NULL OR duration_seconds = 0)'),
-        parameters: {'dur': duration, 'tid': id},
-      );
+      // Длительность (может обновить любой, если она 0/NULL, либо владелец всегда)
+      if (body.containsKey('duration_seconds')) {
+        final dur = int.tryParse(body['duration_seconds']?.toString() ?? '0') ?? 0;
+        if (isOwner) {
+          updates.add('duration_seconds = @dur');
+          params['dur'] = dur;
+        } else {
+          // Пассивное обновление длительности (например, плеером при первом запуске)
+          await conn.execute(
+            Sql.named('UPDATE tracks SET duration_seconds = @dur WHERE id = @tid::uuid AND (duration_seconds IS NULL OR duration_seconds = 0)'),
+            parameters: {'dur': dur, 'tid': id},
+          );
+        }
+      }
+
+      if (isOwner && updates.isNotEmpty) {
+        final sql = 'UPDATE tracks SET ${updates.join(', ')} WHERE id = @tid::uuid';
+        await conn.execute(Sql.named(sql), parameters: params);
+      } else if (!isOwner && body.keys.any((k) => k != 'duration_seconds')) {
+         return jsonRes({'error': 'Нет прав на редактирование метаданных этого трека'}, status: 403);
+      }
+
       return jsonRes({'ok': true});
     } catch (e) {
       return jsonRes({'error': e.toString()}, status: 500);
@@ -1041,6 +1085,28 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       return jsonRes({'ok': true});
     } catch (e) {
       return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  // Прокси для изображений (для обхода CORS на Web)
+  router.get('/v1/proxy/image', (Request req) async {
+    final url = req.url.queryParameters['url'];
+    if (url == null || url.isEmpty) return Response.notFound('Missing url');
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode != 200) return Response(response.statusCode);
+
+      return Response.ok(
+        response.bodyBytes,
+        headers: {
+          'Content-Type': response.headers['content-type'] ?? 'image/jpeg',
+          'Cache-Control': 'public, max-age=86400', // 1 day cache
+          'Access-Control-Allow-Origin': '*',
+        },
+      );
+    } catch (e) {
+      return Response.internalServerError(body: e.toString());
     }
   });
 

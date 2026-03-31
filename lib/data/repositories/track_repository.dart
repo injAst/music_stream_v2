@@ -68,8 +68,35 @@ class TrackRepository {
     File? file,
     List<int>? bytes,
     required String filename,
+  }) {
+    return _uploadFile(
+      file: file,
+      bytes: bytes,
+      filename: filename,
+      endpoint: '/upload',
+    );
+  }
+
+  Future<String> uploadArtwork({
+    File? file,
+    List<int>? bytes,
+    required String filename,
+  }) {
+    return _uploadFile(
+      file: file,
+      bytes: bytes,
+      filename: filename,
+      endpoint: '/upload/artwork',
+    );
+  }
+
+  Future<String> _uploadFile({
+    File? file,
+    List<int>? bytes,
+    required String filename,
+    required String endpoint,
   }) async {
-    final request = http.MultipartRequest('POST', Uri.parse('${ApiConfig.baseUrl}/upload'))
+    final request = http.MultipartRequest('POST', Uri.parse('${ApiConfig.baseUrl}$endpoint'))
       ..headers.addAll(_headers());
       
     if (kIsWeb && bytes != null) {
@@ -98,17 +125,27 @@ class TrackRepository {
     _handleError(res);
   }
 
-  Future<void> patchTrackDuration(String id, int seconds) async {
-    try {
-      final res = await http.patch(
-        Uri.parse('${ApiConfig.baseUrl}/tracks/$id'),
-        headers: _headers(),
-        body: jsonEncode({'duration_seconds': seconds}),
-      );
-      _handleError(res);
-    } catch (e) {
-      debugPrint('Error patching duration: $e');
-    }
+  Future<void> updateTrack({
+    required String id,
+    String? title,
+    String? artist,
+    String? artworkUrl,
+    int? durationSeconds,
+  }) async {
+    final body = <String, dynamic>{};
+    if (title != null) body['title'] = title;
+    if (artist != null) body['artist'] = artist;
+    if (artworkUrl != null) body['artwork_url'] = artworkUrl;
+    if (durationSeconds != null) body['duration_seconds'] = durationSeconds;
+
+    if (body.isEmpty) return;
+
+    final res = await http.patch(
+      Uri.parse('${ApiConfig.baseUrl}/tracks/$id'),
+      headers: _headers(),
+      body: jsonEncode(body),
+    );
+    _handleError(res);
   }
 
   Future<void> likeTrack(String id) async {

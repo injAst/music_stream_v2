@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'dart:ui';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -23,7 +26,7 @@ class LibraryTab extends StatefulWidget {
 
 class _LibraryTabState extends State<LibraryTab> {
   String _searchQuery = '';
-  bool _showPlaylists = false;
+  int _activeTabIndex = 0; // 0: Favorites, 1: My Tracks, 2: Playlists
 
   @override
   void initState() {
@@ -44,6 +47,7 @@ class _LibraryTabState extends State<LibraryTab> {
           }
 
           final likedTracks = lib.tracks.where((t) => t.isLiked).toList();
+          final myTracks = lib.tracks.where((t) => t.canDelete).toList();
           final playlists = plc.playlists;
 
           return CustomScrollView(
@@ -51,23 +55,26 @@ class _LibraryTabState extends State<LibraryTab> {
             slivers: [
               // Шапка с переключателем
               SliverToBoxAdapter(
-                child: _buildHeader(context, likedTracks, playlists),
+                child: _buildHeader(context, likedTracks, myTracks, playlists),
               ),
 
               // Строка поиска (только для треков)
-              if (!_showPlaylists)
+              if (_activeTabIndex != 2)
                 SliverPersistentHeader(
                   pinned: true,
                   delegate: _StickySearchBarDelegate(
                     onSearch: (v) => setState(() => _searchQuery = v),
+                    hintText: _activeTabIndex == 0 ? 'Поиск в любимых' : 'Поиск в моих треках',
                   ),
                 ),
 
               // Основной контент
-              if (_showPlaylists)
+              if (_activeTabIndex == 2)
                 _buildPlaylistGrid(context, playlists)
+              else if (_activeTabIndex == 1)
+                _buildTrackList(context, myTracks, isMyTracks: true)
               else
-                _buildTrackList(context, likedTracks),
+                _buildTrackList(context, likedTracks, isMyTracks: false),
                 
               const SliverToBoxAdapter(child: SizedBox(height: 120)),
             ],
@@ -77,7 +84,7 @@ class _LibraryTabState extends State<LibraryTab> {
     );
   }
 
-  Widget _buildTrackList(BuildContext context, List<Track> allTracks) {
+  Widget _buildTrackList(BuildContext context, List<Track> allTracks, {required bool isMyTracks}) {
     var tracks = allTracks;
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.trim().toLowerCase();
@@ -99,7 +106,7 @@ class _LibraryTabState extends State<LibraryTab> {
           return _TrackTile(
             track: t,
             onPlay: () => context.read<AudioPlayerController>().playTrack(t, playlist: tracks),
-            onLongPress: () => _showTrackOptions(context, t),
+            onLongPress: () => _showTrackOptions(context, t, allowEdit: isMyTracks),
           );
         },
       ),
@@ -175,7 +182,7 @@ class _LibraryTabState extends State<LibraryTab> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, List<Track> likedTracks, List<Playlist> playlists) {
+  Widget _buildHeader(BuildContext context, List<Track> likedTracks, List<Track> myTracks, List<Playlist> playlists) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 70, 24, 20),
       child: Column(
@@ -192,7 +199,41 @@ class _LibraryTabState extends State<LibraryTab> {
                 ),
               ),
               const Spacer(),
-              // Новая кнопка добавления (в стиле Apple Music)
+              // Временная кнопка удаления всего
+              GestureDetector(
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Удалить всё?'),
+                      content: const Text('Все треки в вашей библиотеке будут безвозвратно удалены.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: const Text('ОТМЕНА'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(ctx).pop();
+                            context.read<LibraryController>().deleteAllTracks();
+                          },
+                          child: const Text('УДАЛИТЬ ЛИБРИТ!', style: TextStyle(color: Colors.redAccent)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.surfaceHighlight,
+                  ),
+                  child: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
+                ),
+              ),
               // Кнопка добавления (Apple Music Style)
               GestureDetector(
                 onTap: () => _showAddMenu(context),
@@ -200,7 +241,7 @@ class _LibraryTabState extends State<LibraryTab> {
                   width: 38,
                   height: 38,
                   margin: const EdgeInsets.only(right: 12),
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     color: AppTheme.surfaceHighlight,
                   ),
@@ -246,9 +287,9 @@ class _LibraryTabState extends State<LibraryTab> {
           ),
           const SizedBox(height: 28),
           _PremiumTabSwitcher(
-            activeTab: _showPlaylists ? 1 : 0,
-            onTabChanged: (i) => setState(() => _showPlaylists = i == 1),
-            labels: const ['Любимые', 'Плейлисты'], 
+            activeTab: _activeTabIndex,
+            onTabChanged: (i) => setState(() => _activeTabIndex = i),
+            labels: const ['Любимые', 'Мои', 'Плейлисты'], 
           ),
         ],
       ),
@@ -375,7 +416,7 @@ class _LibraryTabState extends State<LibraryTab> {
     );
   }
 
-  void _showTrackOptions(BuildContext context, Track track) {
+  void _showTrackOptions(BuildContext context, Track track, {required bool allowEdit}) {
     showModalBottomSheet(
       context: context,
       useRootNavigator: true,
@@ -383,7 +424,7 @@ class _LibraryTabState extends State<LibraryTab> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) => _TrackOptionsSheet(track: track),
+      builder: (context) => _TrackOptionsSheet(track: track, allowEdit: allowEdit),
     );
   }
 }
@@ -414,9 +455,13 @@ class _PremiumTabSwitcher extends StatelessWidget {
           AnimatedAlign(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
-            alignment: activeTab == 0 ? Alignment.centerLeft : Alignment.centerRight,
+            alignment: activeTab == 0 
+                ? Alignment.centerLeft 
+                : activeTab == 1 
+                    ? Alignment.center 
+                    : Alignment.centerRight,
             child: FractionallySizedBox(
-              widthFactor: 0.5,
+              widthFactor: 1 / labels.length,
               child: Container(
                 decoration: BoxDecoration(
                   color: AppTheme.accent,
@@ -462,8 +507,9 @@ class _PremiumTabSwitcher extends StatelessWidget {
 }
 
 class _TrackOptionsSheet extends StatelessWidget {
-  const _TrackOptionsSheet({required this.track});
+  const _TrackOptionsSheet({required this.track, required this.allowEdit});
   final Track track;
+  final bool allowEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -492,6 +538,18 @@ class _TrackOptionsSheet extends StatelessWidget {
               ),
             ),
             const Divider(),
+            if (track.canDelete && allowEdit)
+              ListTile(
+                leading: const Icon(Icons.edit_outlined, color: AppTheme.accent),
+                title: const Text('Редактировать'),
+                onTap: () {
+                  Navigator.pop(context);
+                  showDialog(
+                    context: context,
+                    builder: (context) => _EditTrackDialog(track: track),
+                  );
+                },
+              ),
             if (track.isLiked)
               ListTile(
                 leading: const Icon(Icons.favorite, color: Colors.redAccent),
@@ -669,8 +727,9 @@ class _TrackTile extends StatelessWidget {
 }
 
 class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
-  const _StickySearchBarDelegate({required this.onSearch});
+  const _StickySearchBarDelegate({required this.onSearch, required this.hintText});
   final ValueChanged<String> onSearch;
+  final String hintText;
 
   @override
   double get minExtent => 72;
@@ -685,7 +744,7 @@ class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
       child: TextField(
         onChanged: onSearch,
         decoration: InputDecoration(
-          hintText: 'Поиск в любимых треках',
+          hintText: hintText,
           prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
           filled: true,
           fillColor: AppTheme.surfaceHighlight,
@@ -698,4 +757,191 @@ class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _StickySearchBarDelegate oldDelegate) => false;
+}
+
+class _EditTrackDialog extends StatefulWidget {
+  const _EditTrackDialog({required this.track});
+  final Track track;
+
+  @override
+  State<_EditTrackDialog> createState() => _EditTrackDialogState();
+}
+
+class _EditTrackDialogState extends State<_EditTrackDialog> {
+  late TextEditingController _title;
+  late TextEditingController _artist;
+  late TextEditingController _artwork;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _title = TextEditingController(text: widget.track.title);
+    _artist = TextEditingController(text: widget.track.artist);
+    _artwork = TextEditingController(text: widget.track.artworkUrl ?? '');
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _artist.dispose();
+    _artwork.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.surface,
+      title: const Text('Редактировать трек'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _title,
+              decoration: const InputDecoration(
+                labelText: 'Название',
+                labelStyle: TextStyle(color: AppTheme.textSecondary),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.accent)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _artist,
+              decoration: const InputDecoration(
+                labelText: 'Исполнитель',
+                labelStyle: TextStyle(color: AppTheme.textSecondary),
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.accent)),
+              ),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _artwork,
+                    decoration: const InputDecoration(
+                      labelText: 'URL обложки',
+                      labelStyle: TextStyle(color: AppTheme.textSecondary),
+                      contentPadding: EdgeInsets.zero,
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.accent)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: _loading ? null : _uploadArtwork,
+                  tooltip: 'Загрузить обложку',
+                  icon: const Icon(Icons.file_upload, color: AppTheme.accent),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : _delete,
+          child: const Text('УДАЛИТЬ', style: TextStyle(color: Colors.redAccent)),
+        ),
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.pop(context),
+          child: const Text('ОТМЕНА', style: TextStyle(color: AppTheme.textSecondary)),
+        ),
+        TextButton(
+          onPressed: _loading ? null : _save,
+          child: _loading 
+            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent))
+            : const Text('СОХРАНИТЬ', style: TextStyle(color: AppTheme.accent)),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _delete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Удалить трек?'),
+        content: const Text('Это действие нельзя отменить.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('ОТМЕНА', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('УДАЛИТЬ', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+
+    if (ok == true && mounted) {
+      setState(() => _loading = true);
+      try {
+        await context.read<LibraryController>().removeTrack(widget.track.id);
+        if (mounted) Navigator.pop(context); // Close edit dialog
+      } catch (e) {
+        if (mounted) {
+          setState(() => _loading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка при удалении: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _uploadArtwork() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
+      if (result == null) return;
+      
+      setState(() => _loading = true);
+      
+      final file = result.files.first;
+      final url = await context.read<LibraryController>().uploadArtwork(
+        file: kIsWeb ? null : File(file.path!),
+        bytes: kIsWeb ? file.bytes : null,
+        filename: file.name,
+      );
+      
+      setState(() {
+        _artwork.text = url;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() => _loading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка загрузки: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _loading = true);
+    try {
+      await context.read<LibraryController>().updateTrackMetadata(
+        id: widget.track.id,
+        title: _title.text.trim(),
+        artist: _artist.text.trim(),
+        artworkUrl: _artwork.text.trim(),
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        // Извлекаем более понятное сообщение об ошибке
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка: $msg')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 }
