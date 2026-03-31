@@ -39,6 +39,7 @@ class AudioPlayerController extends ChangeNotifier {
   final SharedPreferences _prefs;
   static const _volumeKey = 'ms_volume_v1';
   List<Track> _currentPlaylist = [];
+  ConcatenatingAudioSource? _playlistSource;
   int _currentIndex = -1;
   LibraryController? _library;
   AuthRepository? _authRepo;
@@ -83,6 +84,8 @@ class AudioPlayerController extends ChangeNotifier {
     }
   }
 
+  List<Track> get currentPlaylist => _currentPlaylist;
+
   Track? get currentTrack {
     if (_currentIndex >= 0 && _currentIndex < _currentPlaylist.length) {
       return _currentPlaylist[_currentIndex];
@@ -125,19 +128,32 @@ class AudioPlayerController extends ChangeNotifier {
     _authRepo?.updateLastTrack(track.id);
 
     try {
-      final source = ConcatenatingAudioSource(
+      _playlistSource = ConcatenatingAudioSource(
         children: _currentPlaylist.map((t) {
           final resolved = ApiConfig.resolveUrl(t.streamUrl) ?? t.streamUrl;
           return AudioSource.uri(Uri.parse(resolved));
         }).toList(),
       );
       
-      await _player.setAudioSource(source, initialIndex: _currentIndex);
+      await _player.setAudioSource(_playlistSource!, initialIndex: _currentIndex);
       await _player.play();
     } catch (e) {
       debugPrint('playTrack error: $e');
       rethrow;
     }
+  }
+
+  Future<void> reorder(int oldIndex, int newIndex) async {
+    if (newIndex > oldIndex) newIndex -= 1;
+    
+    // Обновляем список в памяти
+    final track = _currentPlaylist.removeAt(oldIndex);
+    _currentPlaylist.insert(newIndex, track);
+    
+    // Обновляем источник звука в плеере
+    await _playlistSource?.move(oldIndex, newIndex);
+    
+    notifyListeners();
   }
 
   Future<void> playWave(List<Track> tracks) async {

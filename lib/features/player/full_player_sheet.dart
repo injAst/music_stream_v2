@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/audio_player_controller.dart';
 import '../../providers/library_controller.dart';
 import '../widgets/track_artwork.dart';
+import 'widgets/audio_visualizer.dart';
 
 Future<void> showFullPlayerSheet(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -19,12 +20,21 @@ Future<void> showFullPlayerSheet(BuildContext context) {
   );
 }
 
-class _FullPlayerBody extends StatelessWidget {
+class _FullPlayerBody extends StatefulWidget {
   const _FullPlayerBody();
 
   @override
+  State<_FullPlayerBody> createState() => _FullPlayerBodyState();
+}
+
+class _FullPlayerBodyState extends State<_FullPlayerBody> {
+  bool _showQueue = false;
+
+  @override
   Widget build(BuildContext context) {
-    final playingTrackId = context.select<AudioPlayerController, String?>((a) => a.currentTrack?.id);
+    final audio = context.watch<AudioPlayerController>();
+    final playingTrackId = audio.currentTrack?.id;
+    
     if (playingTrackId == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);
@@ -50,34 +60,76 @@ class _FullPlayerBody extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppTheme.textSecondary.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(2),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const SizedBox(width: 48), // Spacer for balance
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.textSecondary.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              IconButton(
+                onPressed: () => setState(() => _showQueue = !_showQueue),
+                icon: Icon(
+                  _showQueue ? Icons.music_note_rounded : Icons.queue_music_rounded,
+                  color: _showQueue ? AppTheme.accent : AppTheme.textSecondary,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 24),
-          TrackArtwork(url: track.artworkUrl, size: 280, radius: 12),
-          const SizedBox(height: 24),
-          Text(
-            track.title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
+          const SizedBox(height: 12),
+          if (!_showQueue) ...[
+            TrackArtwork(url: track.artworkUrl, size: 280, radius: 12),
+            const SizedBox(height: 12),
+            AudioVisualizer(isPlaying: audio.isPlaying),
+            const SizedBox(height: 12),
+            Text(
+              track.title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            track.artist,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 16,
+            const SizedBox(height: 8),
+            Text(
+              track.artist,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 16,
+              ),
             ),
-          ),
+          ] else ...[
+            SizedBox(
+              height: 380,
+              child: ReorderableListView.builder(
+                itemCount: audio.currentPlaylist.length,
+                onReorder: audio.reorder,
+                itemBuilder: (context, index) {
+                  final t = audio.currentPlaylist[index];
+                  final isCurrent = t.id == track.id;
+                  return ListTile(
+                    key: ValueKey(t.id),
+                    leading: TrackArtwork(url: t.artworkUrl, size: 40, radius: 4),
+                    title: Text(
+                      t.title,
+                      style: TextStyle(
+                        color: isCurrent ? AppTheme.accent : AppTheme.textPrimary,
+                        fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
+                    subtitle: Text(t.artist, style: const TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.drag_handle_rounded, size: 20),
+                  );
+                },
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
