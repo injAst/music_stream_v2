@@ -74,12 +74,6 @@ class _LibraryTabState extends State<LibraryTab> {
           );
         },
       ),
-      floatingActionButton: _showPlaylists ? FloatingActionButton(
-        onPressed: () => _showCreatePlaylistDialog(context),
-        backgroundColor: AppTheme.accent,
-        foregroundColor: Colors.black,
-        child: const Icon(Icons.add),
-      ) : null,
     );
   }
 
@@ -137,20 +131,23 @@ class _LibraryTabState extends State<LibraryTab> {
                   // Квадратная обложка
                   AspectRatio(
                     aspectRatio: 1,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceHighlight.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12),
-                        image: p.artworkUrl != null 
-                          ? DecorationImage(
-                              image: NetworkImage(ApiConfig.resolveUrl(p.artworkUrl)!), 
-                              fit: BoxFit.cover,
-                            )
+                    child: Hero(
+                      tag: p.id,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceHighlight.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                          image: p.artworkUrl != null 
+                            ? DecorationImage(
+                                image: NetworkImage(ApiConfig.resolveUrl(p.artworkUrl)!), 
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                        ),
+                        child: p.artworkUrl == null 
+                          ? const Center(child: Icon(Icons.music_note, size: 28, color: AppTheme.textSecondary))
                           : null,
                       ),
-                      child: p.artworkUrl == null 
-                        ? const Center(child: Icon(Icons.music_note, size: 28, color: AppTheme.textSecondary))
-                        : null,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -195,6 +192,20 @@ class _LibraryTabState extends State<LibraryTab> {
                 ),
               ),
               const Spacer(),
+              // Новая кнопка добавления (в стиле Apple Music)
+              GestureDetector(
+                onTap: () => _showAddMenu(context),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.accent.withValues(alpha: 0.15),
+                  ),
+                  child: const Icon(Icons.add, color: AppTheme.accent, size: 24),
+                ),
+              ),
               GestureDetector(
                 onTap: () => context.push('/profile'),
                 child: Container(
@@ -230,6 +241,61 @@ class _LibraryTabState extends State<LibraryTab> {
             labels: const ['Любимые', 'Плейлисты'], 
           ),
         ],
+      ),
+    );
+  }
+
+  void _showAddMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'Библиотека',
+                  style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: const Icon(Icons.music_note_rounded, color: Colors.blueAccent),
+                ),
+                title: const Text('Загрузить трек', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Добавить свою музыку в облако'),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.push('/add-track');
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: const Icon(Icons.playlist_add_rounded, color: AppTheme.accent),
+                ),
+                title: const Text('Создать плейлист', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Собрать свою коллекцию'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCreatePlaylistDialog(context);
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -300,8 +366,9 @@ class _LibraryTabState extends State<LibraryTab> {
   }
 
   void _showTrackOptions(BuildContext context, Track track) {
-     showModalBottomSheet(
+    showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -391,56 +458,59 @@ class _TrackOptionsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                TrackArtwork(url: track.artworkUrl, size: 56, radius: 4),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(track.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary)),
-                    ],
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  TrackArtwork(url: track.artworkUrl, size: 56, radius: 4),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(track.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const Divider(),
-          if (track.isLiked)
+            const Divider(),
+            if (track.isLiked)
+              ListTile(
+                leading: const Icon(Icons.favorite, color: Colors.redAccent),
+                title: const Text('Удалить из любимых'),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.read<LibraryController>().toggleLike(track.id);
+                },
+              )
+            else
+              ListTile(
+                leading: const Icon(Icons.favorite_border),
+                title: const Text('В любимые треки'),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.read<LibraryController>().toggleLike(track.id);
+                },
+              ),
             ListTile(
-              leading: const Icon(Icons.favorite, color: Colors.redAccent),
-              title: const Text('Удалить из любимых'),
+              leading: const Icon(Icons.playlist_add),
+              title: const Text('Добавить в плейлист'),
               onTap: () {
                 Navigator.pop(context);
-                context.read<LibraryController>().toggleLike(track.id);
-              },
-            )
-          else
-            ListTile(
-              leading: const Icon(Icons.favorite_border),
-              title: const Text('В любимые треки'),
-              onTap: () {
-                Navigator.pop(context);
-                context.read<LibraryController>().toggleLike(track.id);
+                _showAddToPlaylistPicker(context, track);
               },
             ),
-          ListTile(
-            leading: const Icon(Icons.playlist_add),
-            title: const Text('Добавить в плейлист'),
-            onTap: () {
-              Navigator.pop(context);
-              _showAddToPlaylistPicker(context, track);
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
@@ -448,6 +518,7 @@ class _TrackOptionsSheet extends StatelessWidget {
   void _showAddToPlaylistPicker(BuildContext context, Track track) {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: AppTheme.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
@@ -455,45 +526,48 @@ class _TrackOptionsSheet extends StatelessWidget {
         initialChildSize: 0.6,
         maxChildSize: 0.9,
         expand: false,
-        builder: (context, scroll) => Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Выберите плейлист', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            ),
-            Expanded(
-              child: Consumer<PlaylistController>(
-                builder: (context, plc, _) {
-                  if (plc.playlists.isEmpty) {
-                    return const Center(child: Text('У вас пока нет плейлистов'));
-                  }
-                  return ListView.builder(
-                    controller: scroll,
-                    itemCount: plc.playlists.length,
-                    itemBuilder: (context, i) {
-                      final p = plc.playlists[i];
-                      return ListTile(
-                        leading: Container(
-                          width: 40, height: 40, 
-                          decoration: BoxDecoration(color: AppTheme.surfaceHighlight, borderRadius: BorderRadius.circular(4)),
-                          child: const Icon(Icons.music_note, size: 20),
-                        ),
-                        title: Text(p.name),
-                        subtitle: Text('${p.trackCount} треков'),
-                        onTap: () {
-                          plc.addTrackToPlaylist(p.id, track.id);
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Добавлено в "${p.name}"'), backgroundColor: AppTheme.accent),
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
+        builder: (context, scroll) => Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('Выберите плейлист', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               ),
-            ),
-          ],
+              Expanded(
+                child: Consumer<PlaylistController>(
+                  builder: (context, plc, _) {
+                    if (plc.playlists.isEmpty) {
+                      return const Center(child: Text('У вас пока нет плейлистов'));
+                    }
+                    return ListView.builder(
+                      controller: scroll,
+                      itemCount: plc.playlists.length,
+                      itemBuilder: (context, i) {
+                        final p = plc.playlists[i];
+                        return ListTile(
+                          leading: Container(
+                            width: 40, height: 40, 
+                            decoration: BoxDecoration(color: AppTheme.surfaceHighlight, borderRadius: BorderRadius.circular(4)),
+                            child: const Icon(Icons.music_note, size: 20),
+                          ),
+                          title: Text(p.name),
+                          subtitle: Text('${p.trackCount} треков'),
+                          onTap: () {
+                            plc.addTrackToPlaylist(p.id, track.id);
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Добавлено в "${p.name}"'), backgroundColor: AppTheme.accent),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -512,6 +586,13 @@ class _TrackTile extends StatelessWidget {
   final VoidCallback onPlay;
   final VoidCallback? onLongPress;
 
+  String _formatDuration(int? seconds) {
+    if (seconds == null || seconds <= 0) return '--:--';
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isPlayingThis = context.select<AudioPlayerController, bool>(
@@ -528,7 +609,12 @@ class _TrackTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            TrackArtwork(url: track.artworkUrl, size: 52, radius: 4),
+            TrackArtwork(
+              url: track.artworkUrl, 
+              size: 52, 
+              radius: 4, 
+              heroTag: track.id,
+            ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
@@ -553,6 +639,10 @@ class _TrackTile extends StatelessWidget {
                    ),
                 ],
               ),
+            ),
+            Text(
+              _formatDuration(track.durationSeconds),
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
             IconButton(
               icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary, size: 20),

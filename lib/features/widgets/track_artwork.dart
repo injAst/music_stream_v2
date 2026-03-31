@@ -9,16 +9,18 @@ class TrackArtwork extends StatelessWidget {
     required this.url,
     this.size = 56,
     this.radius = 6,
+    this.heroTag,
   });
 
   final String? url;
   final double size;
   final double radius;
+  final String? heroTag;
 
   @override
   Widget build(BuildContext context) {
     final u = ApiConfig.resolveUrl(url);
-    return ClipRRect(
+    Widget content = ClipRRect(
       borderRadius: BorderRadius.circular(radius),
       child: SizedBox(
         width: size,
@@ -34,6 +36,14 @@ class TrackArtwork extends StatelessWidget {
             : _placeholder(),
       ),
     );
+
+    if (heroTag != null) {
+      return Hero(
+        tag: heroTag!,
+        child: content,
+      );
+    }
+    return content;
   }
 
   Widget _placeholder() {

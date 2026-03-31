@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login_screen.dart';
@@ -10,8 +11,11 @@ import '../../features/tracks/add_track_screen.dart';
 import '../../features/playlists/playlist_detail_screen.dart';
 import '../../providers/auth_controller.dart';
 
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 GoRouter createAppRouter(AuthController auth) {
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: auth.isLoggedIn ? '/home' : '/login',
     refreshListenable: auth,
     redirect: (context, state) {

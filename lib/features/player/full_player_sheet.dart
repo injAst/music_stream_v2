@@ -30,6 +30,7 @@ class _FullPlayerBody extends StatefulWidget {
 
 class _FullPlayerBodyState extends State<_FullPlayerBody> {
   bool _showQueue = false;
+  bool _showLyrics = false;
 
   @override
   Widget build(BuildContext context) {
@@ -95,12 +96,29 @@ class _FullPlayerBodyState extends State<_FullPlayerBody> {
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => setState(() => _showQueue = !_showQueue),
-                      icon: Icon(
-                        _showQueue ? Icons.music_note_rounded : Icons.queue_music_rounded,
-                        color: _showQueue ? AppTheme.accent : AppTheme.textSecondary,
-                      ),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () => setState(() {
+                            _showLyrics = !_showLyrics;
+                            if (_showLyrics) _showQueue = false;
+                          }),
+                          icon: Icon(
+                            _showLyrics ? Icons.lyrics_rounded : Icons.lyrics_outlined,
+                            color: _showLyrics ? AppTheme.accent : AppTheme.textSecondary,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => setState(() {
+                            _showQueue = !_showQueue;
+                            if (_showQueue) _showLyrics = false;
+                          }),
+                          icon: Icon(
+                            _showQueue ? Icons.queue_music_rounded : Icons.queue_music_outlined,
+                            color: _showQueue ? AppTheme.accent : AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -108,6 +126,8 @@ class _FullPlayerBodyState extends State<_FullPlayerBody> {
                 
                 if (_showQueue)
                   _buildQueueView(audio)
+                else if (_showLyrics)
+                  _buildLyricsView(track)
                 else if (isLandscape)
                   _buildLandscapeLayout(audio, track, artworkSize)
                 else
@@ -128,7 +148,12 @@ class _FullPlayerBodyState extends State<_FullPlayerBody> {
     
     return Column(
       children: [
-        TrackArtwork(url: track.artworkUrl, size: artworkSize, radius: 12),
+        TrackArtwork(
+          url: track.artworkUrl, 
+          size: artworkSize, 
+          radius: 12,
+          heroTag: track.id,
+        ),
         if (screenHeight > 680) ...[
           const SizedBox(height: 12),
           AudioVisualizer(isPlaying: audio.isPlaying),
@@ -166,7 +191,12 @@ class _FullPlayerBodyState extends State<_FullPlayerBody> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        TrackArtwork(url: track.artworkUrl, size: artworkSize, radius: 12),
+        TrackArtwork(
+          url: track.artworkUrl, 
+          size: artworkSize, 
+          radius: 12,
+          heroTag: track.id,
+        ),
         const SizedBox(width: 32),
         Expanded(
           child: Column(
@@ -222,27 +252,81 @@ class _FullPlayerBodyState extends State<_FullPlayerBody> {
     );
   }
 
+  Widget _buildLyricsView(dynamic track) {
+    return Container(
+      height: 380,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ShaderMask(
+        shaderCallback: (rect) {
+          return const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
+            stops: [0.0, 0.1, 0.9, 1.0],
+          ).createShader(rect);
+        },
+        blendMode: BlendMode.dstIn,
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              _lyricLine("Я вижу этот свет", true),
+              _lyricLine("Он манит за собой", false),
+              _lyricLine("В пространстве нет границ", false),
+              _lyricLine("Где мы найдем покой", false),
+              _lyricLine("Звучат аккорды дня", false),
+              _lyricLine("В сиянии огней", false),
+              _lyricLine("И музыка ведет", false),
+              _lyricLine("К мечте твоей и моей", false),
+              _lyricLine("Сквозь шум ночных дорог", false),
+              _lyricLine("Сквозь холод горьких слов", false),
+              _lyricLine("Мы сохраним в сердцах", false),
+              _lyricLine("Ту вечную любовь", false),
+              const SizedBox(height: 60),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _lyricLine(String text, bool active) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.outfit(
+          fontSize: active ? 26 : 22,
+          fontWeight: active ? FontWeight.w900 : FontWeight.w600,
+          color: active ? AppTheme.accent : Colors.white.withValues(alpha: 0.4),
+          letterSpacing: -0.5,
+        ),
+      ),
+    );
+  }
+
   Widget _buildLikeButton(dynamic track) {
     return GestureDetector(
       onTap: () => context.read<LibraryController>().toggleLike(track.id),
       behavior: HitTestBehavior.opaque,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            track.isLiked ? Icons.favorite : Icons.favorite_border,
+            track.isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
             color: track.isLiked ? Colors.redAccent : AppTheme.textSecondary,
-            size: 20,
+            size: 28,
           ),
           if (track.likesCount > 0) ...[
-            const SizedBox(width: 8),
+            const SizedBox(height: 4),
             Text(
               '${track.likesCount}',
               style: const TextStyle(
                 color: AppTheme.textSecondary, 
                 fontWeight: FontWeight.bold,
-                fontSize: 14,
+                fontSize: 12,
               ),
             ),
           ],

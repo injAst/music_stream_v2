@@ -9,6 +9,13 @@ import '../../data/repositories/user_repository.dart';
 import '../../providers/audio_player_controller.dart';
 import '../widgets/track_artwork.dart';
 
+String _formatDuration(int? seconds) {
+  if (seconds == null || seconds <= 0) return '--:--';
+  final m = seconds ~/ 60;
+  final s = seconds % 60;
+  return '$m:${s.toString().padLeft(2, '0')}';
+}
+
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key, required this.userId});
   final String userId;
@@ -296,9 +303,48 @@ class _LikedTrackTile extends StatelessWidget {
                 ],
               ),
             ),
-            // Иконка сердечка (статична — чужой профиль)
-            const Icon(Icons.favorite_rounded,
-                color: Colors.redAccent, size: 18),
+            // Продолжительность и меню
+            Text(
+              _formatDuration(track.durationSeconds),
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            IconButton(
+              icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary, size: 20),
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: AppTheme.surface,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  builder: (context) => SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 140),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ListTile(
+                            leading: const Icon(Icons.playlist_add_rounded),
+                            title: const Text('Добавить в мой плейлист'),
+                            onTap: () {
+                              Navigator.pop(context);
+                              // Можно вызвать существующий пикер
+                            },
+                          ),
+                          ListTile(
+                            leading: const Icon(Icons.share_rounded),
+                            title: const Text('Поделиться'),
+                            onTap: () {
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),

@@ -248,9 +248,19 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.remove_circle_outline, color: AppTheme.textSecondary, size: 22),
-                      onPressed: () => _removeTrack(t),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _formatDuration(t.durationSeconds),
+                          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline, color: AppTheme.textSecondary, size: 22),
+                          onPressed: () => _removeTrack(t),
+                        ),
+                      ],
                     ),
                     onTap: () => context.read<AudioPlayerController>().playTrack(t, playlist: _tracks),
                   ),
@@ -261,6 +271,13 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
         ],
       ),
     );
+  }
+
+  String _formatDuration(int? seconds) {
+    if (seconds == null || seconds <= 0) return '--:--';
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
   }
 
   void _confirmDelete() {

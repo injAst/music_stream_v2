@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../providers/audio_player_controller.dart';
+import '../../providers/library_controller.dart';
 import '../widgets/track_artwork.dart';
 import 'full_player_sheet.dart';
 
@@ -77,7 +78,12 @@ class _MiniPlayerState extends State<MiniPlayer> {
                       key: ValueKey(track.id), // Важно для работы AnimatedSwitcher
                       child: Row(
                         children: [
-                          TrackArtwork(url: track.artworkUrl, size: 48, radius: 4),
+                          TrackArtwork(
+                            url: track.artworkUrl,
+                            size: 48,
+                            radius: 4,
+                            heroTag: track.id,
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -104,6 +110,19 @@ class _MiniPlayerState extends State<MiniPlayer> {
                                 ),
                               ],
                             ),
+                          ),
+                          Consumer<LibraryController>(
+                            builder: (context, lib, _) {
+                              final isLiked = lib.tracks.any((t) => t.id == track.id && t.isLiked);
+                              return IconButton(
+                                onPressed: () => lib.toggleLike(track.id),
+                                icon: Icon(
+                                  isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                  color: isLiked ? Colors.redAccent : AppTheme.textSecondary.withValues(alpha: 0.8),
+                                  size: 24,
+                                ),
+                              );
+                            },
                           ),
                           IconButton(
                             onPressed: () => audio.togglePlayPause(),
