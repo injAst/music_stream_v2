@@ -38,6 +38,15 @@ class DiscoverTab extends StatelessWidget {
           }
           final tracks = lib.tracks;
 
+          // Логика "Новых релизов": 7 дней или 5 последних (fallback)
+          final weekAgo = DateTime.now().subtract(const Duration(days: 7));
+          var newReleases = tracks.where((t) => t.createdAt != null && t.createdAt!.isAfter(weekAgo)).toList();
+          
+          // Если за неделю ничего не вышло — показываем 6 последних добавленных
+          if (newReleases.isEmpty) {
+            newReleases = tracks.take(6).toList();
+          }
+
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
@@ -78,10 +87,10 @@ class DiscoverTab extends StatelessWidget {
 
               if (tracks.isNotEmpty) ...[
                 _buildSectionHeader(context, 'Новые релизы', () {
-                   _showAllTracks(context, 'Новые релизы', tracks);
+                   _showAllTracks(context, 'Новые релизы', newReleases);
                 }),
                 SliverToBoxAdapter(
-                  child: _NewReleasesGrid(tracks: tracks),
+                  child: _NewReleasesGrid(tracks: newReleases),
                 ),
 
                 _buildSectionHeader(context, 'В тренде', () {
