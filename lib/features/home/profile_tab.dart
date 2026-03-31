@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -83,19 +82,36 @@ class _Avatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final u = url;
-    return CircleAvatar(
-      radius: 56,
-      backgroundColor: AppTheme.surfaceHighlight,
-      backgroundImage: u != null && u.isNotEmpty
-          ? CachedNetworkImageProvider(u)
-          : null,
-      child: u == null || u.isEmpty
-          ? Text(
-              name.isNotEmpty ? name[0].toUpperCase() : '?',
-              style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w700),
-            )
-          : null,
+    return Hero(
+      tag: 'profile_avatar',
+      child: Container(
+        width: 112,
+        height: 112,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppTheme.surfaceHighlight,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.5),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: url != null && url!.isNotEmpty
+            ? Image.network(
+                url!,
+                fit: BoxFit.cover,
+              )
+            : Center(
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w700),
+                ),
+              ),
+      ),
     );
   }
 }

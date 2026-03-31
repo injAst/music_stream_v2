@@ -193,43 +193,53 @@ class _LibraryTabState extends State<LibraryTab> {
               ),
               const Spacer(),
               // Новая кнопка добавления (в стиле Apple Music)
+              // Кнопка добавления (Apple Music Style)
               GestureDetector(
                 onTap: () => _showAddMenu(context),
                 child: Container(
-                  width: 40,
-                  height: 40,
+                  width: 38,
+                  height: 38,
                   margin: const EdgeInsets.only(right: 12),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppTheme.accent.withValues(alpha: 0.15),
+                    color: AppTheme.surfaceHighlight,
                   ),
-                  child: const Icon(Icons.add, color: AppTheme.accent, size: 24),
+                  child: const Icon(Icons.add, color: AppTheme.textPrimary, size: 22),
                 ),
               ),
+              // Аватарка профиля
               GestureDetector(
-                onTap: () => context.push('/profile'),
-                child: Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3), width: 2),
-                    color: AppTheme.surfaceHighlight,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                onTap: () {
+                  final user = context.read<AuthController>().user;
+                  if (user != null) {
+                    context.push('/profile/${user.id}');
+                  }
+                },
+                child: Hero(
+                  tag: 'profile_avatar',
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppTheme.surfaceHighlight,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: context.read<AuthController>().user?.avatarUrl != null 
+                      ? Image.network(
+                          ApiConfig.resolveUrl(context.read<AuthController>().user?.avatarUrl)!,
+                          fit: BoxFit.cover,
+                        )
+                      : const Icon(Icons.person_rounded, color: AppTheme.textSecondary, size: 20),
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: context.read<AuthController>().user?.avatarUrl != null 
-                    ? Image.network(
-                        ApiConfig.resolveUrl(context.read<AuthController>().user?.avatarUrl)!,
-                        fit: BoxFit.cover,
-                      )
-                    : const Icon(Icons.person, color: AppTheme.textSecondary),
                 ),
               ),
             ],
@@ -586,12 +596,6 @@ class _TrackTile extends StatelessWidget {
   final VoidCallback onPlay;
   final VoidCallback? onLongPress;
 
-  String _formatDuration(int? seconds) {
-    if (seconds == null || seconds <= 0) return '--:--';
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -640,9 +644,18 @@ class _TrackTile extends StatelessWidget {
                 ],
               ),
             ),
-            Text(
-              _formatDuration(track.durationSeconds),
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            Consumer<LibraryController>(
+              builder: (context, lib, _) {
+                final isLiked = track.isLiked;
+                return IconButton(
+                  onPressed: () => lib.toggleLike(track.id),
+                  icon: Icon(
+                    isLiked ? Icons.favorite_rounded : Icons.favorite_outline_rounded,
+                    color: isLiked ? Colors.redAccent : AppTheme.textSecondary,
+                    size: 22,
+                  ),
+                );
+              },
             ),
             IconButton(
               icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary, size: 20),

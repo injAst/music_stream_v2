@@ -96,65 +96,67 @@ class _AuthenticatedShellState extends State<AuthenticatedShell> {
               left: 0,
               right: 0,
               bottom: 0,
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppTheme.background.withValues(alpha: 0.7),
-                      border: Border(
-                        top: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          width: 0.5,
-                        ),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const MiniPlayer(),
-                        if (isHomeTab)
-                          Theme(
-                            data: Theme.of(context).copyWith(
-                              navigationBarTheme: NavigationBarThemeData(
-                                backgroundColor: Colors.transparent,
-                                indicatorColor: AppTheme.accent.withValues(alpha: 0.1),
-                                labelTextStyle: WidgetStateProperty.resolveWith((states) {
-                                  if (states.contains(WidgetState.selected)) {
-                                    return const TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold, fontSize: 12);
-                                  }
-                                  return const TextStyle(color: AppTheme.textSecondary, fontSize: 12);
-                                }),
-                              ),
-                            ),
-                            child: NavigationBar(
-                              height: 60,
-                              elevation: 0,
-                              backgroundColor: Colors.transparent,
-                              selectedIndex: nav.index,
-                              onDestinationSelected: (i) => nav.setIndex(i),
-                              destinations: [
-                                NavigationDestination(
-                                  icon: Icon(Icons.home_outlined, color: _iconColor(nav.index, 0)),
-                                  selectedIcon: const Icon(Icons.home_rounded, color: AppTheme.accent),
-                                  label: 'Главная',
-                                ),
-                                NavigationDestination(
-                                  icon: Icon(Icons.library_music_outlined, color: _iconColor(nav.index, 1)),
-                                  selectedIcon: const Icon(Icons.library_music_rounded, color: AppTheme.accent),
-                                  label: 'Медиатека',
-                                ),
-                                NavigationDestination(
-                                  icon: Icon(Icons.person_outline_rounded, color: _iconColor(nav.index, 2)),
-                                  selectedIcon: const Icon(Icons.person_rounded, color: AppTheme.accent),
-                                  label: 'Профиль',
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  border: Border(
+                    top: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      width: 0.5,
                     ),
                   ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const MiniPlayer(),
+                    if (isHomeTab)
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          navigationBarTheme: NavigationBarThemeData(
+                            backgroundColor: Colors.transparent,
+                            indicatorColor: AppTheme.accent.withValues(alpha: 0.1),
+                            labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                              if (states.contains(WidgetState.selected)) {
+                                return const TextStyle(
+                                  color: AppTheme.accent, 
+                                  fontWeight: FontWeight.bold, 
+                                  fontSize: 12,
+                                );
+                              }
+                              return const TextStyle(
+                                color: AppTheme.textSecondary, 
+                                fontSize: 12,
+                              );
+                            }),
+                          ),
+                        ),
+                        child: NavigationBar(
+                          height: 60,
+                          elevation: 0,
+                          backgroundColor: Colors.transparent,
+                          selectedIndex: nav.index,
+                          onDestinationSelected: (i) => nav.setIndex(i),
+                          destinations: [
+                            NavigationDestination(
+                              icon: Icon(Icons.home_outlined, color: _iconColor(nav.index, 0)),
+                              selectedIcon: const Icon(Icons.home_rounded, color: AppTheme.accent),
+                              label: 'Главная',
+                            ),
+                            NavigationDestination(
+                              icon: Icon(Icons.library_music_outlined, color: _iconColor(nav.index, 1)),
+                              selectedIcon: const Icon(Icons.library_music_rounded, color: AppTheme.accent),
+                              label: 'Медиатека',
+                            ),
+                            NavigationDestination(
+                              icon: Icon(Icons.person_outline_rounded, color: _iconColor(nav.index, 2)),
+                              selectedIcon: const Icon(Icons.person_rounded, color: AppTheme.accent),
+                              label: 'Профиль',
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

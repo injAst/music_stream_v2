@@ -62,6 +62,27 @@ class DiscoverTab extends StatelessWidget {
           final trendingAll = trendingTracks.take(100).toList();
           final trendingHome = trendingTracks.take(8).toList();
 
+          // Логика "Рекомендаций": Похожие по артистам + Популярное (Discovery Mode)
+          final likedTracks = tracks.where((t) => t.isLiked).toList();
+          final likedArtists = likedTracks.map((t) => t.artist).toSet();
+          
+          // 1. Треки тех же артистов, которых пользователь лайкнул (но сами треки еще не лайкнуты)
+          var recommended = tracks.where((t) => !t.isLiked && likedArtists.contains(t.artist)).toList();
+          
+          // 2. Если мало (меньше 20) — добавляем просто популярные треки, которые еще не лайкнуты
+          if (recommended.length < 20) {
+            final popularNotLiked = tracks
+                .where((t) => !t.isLiked && !recommended.contains(t))
+                .toList()
+              ..sort((a, b) => b.likesCount.compareTo(a.likesCount));
+            recommended.addAll(popularNotLiked.take(20 - recommended.length));
+          }
+          
+          // 3. Перемешиваем для эффекта открытия и ограничиваем списки
+          recommended.shuffle();
+          final recommendationsHome = recommended.take(10).toList();
+          final recommendationsAll = recommended.take(60).toList();
+
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
@@ -83,12 +104,8 @@ class DiscoverTab extends StatelessWidget {
                     ),
                   ),
                 ),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_none_rounded, color: AppTheme.textSecondary),
-                    onPressed: () {},
-                  ),
-                  const SizedBox(width: 8),
+                actions: const [
+                  SizedBox(width: 20),
                 ],
               ),
 
@@ -131,17 +148,17 @@ class DiscoverTab extends StatelessWidget {
                 ),
 
                 _buildSectionHeader(context, 'Рекомендации', () {
-                   _showAllTracks(context, 'Рекомендации', tracks.reversed.toList());
+                   _showAllTracks(context, 'Рекомендации', recommendationsAll);
                 }),
                 SliverPadding(
                   padding: const EdgeInsets.only(bottom: 120),
                   sliver: SliverList.builder(
-                    itemCount: tracks.length > 10 ? 10 : tracks.length,
+                    itemCount: recommendationsHome.length,
                     itemBuilder: (context, i) {
-                      final t = tracks[tracks.length - 1 - i];
+                      final t = recommendationsHome[i];
                       return _VerticalTrackTile(
                         track: t,
-                        onPlay: () => context.read<AudioPlayerController>().playTrack(t, playlist: tracks),
+                        onPlay: () => context.read<AudioPlayerController>().playTrack(t, playlist: recommendationsHome),
                         onMore: () => _showTrackOptions(context, t),
                       );
                     },

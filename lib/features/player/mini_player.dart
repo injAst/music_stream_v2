@@ -35,7 +35,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
         }
 
         return Material(
-          color: AppTheme.surfaceHighlight,
+          color: Colors.transparent,
           child: GestureDetector(
             onHorizontalDragEnd: (details) {
               if (details.primaryVelocity! < 0) {
