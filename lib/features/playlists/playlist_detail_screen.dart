@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -72,35 +73,78 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 300,
+            expandedHeight: 380,
             pinned: true,
+            stretch: true,
             backgroundColor: AppTheme.background,
+            surfaceTintColor: Colors.transparent,
             flexibleSpace: FlexibleSpaceBar(
-              title: Text(_playlist!.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              stretchModes: const [StretchMode.zoomBackground, StretchMode.blurBackground],
               background: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      AppTheme.surfaceHighlight,
+                      AppTheme.surfaceHighlight.withValues(alpha: 0.8),
                       AppTheme.background,
                     ],
                   ),
                 ),
-                child: Center(
-                  child: Container(
-                    width: 160,
-                    height: 160,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 20, offset: Offset(0, 10))],
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 60),
+                    // Обложка с тенью
+                    Container(
+                      width: 200,
+                      height: 200,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            blurRadius: 40,
+                            offset: const Offset(0, 20),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _playlist!.artworkUrl != null 
+                          ? Image.network(ApiConfig.resolveUrl(_playlist!.artworkUrl)!, fit: BoxFit.cover)
+                          : const Center(child: Icon(Icons.music_note, size: 80, color: AppTheme.textSecondary)),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: _playlist!.artworkUrl != null 
-                        ? Image.network(ApiConfig.resolveUrl(_playlist!.artworkUrl)!, fit: BoxFit.cover)
-                        : const Icon(Icons.music_note, size: 80, color: AppTheme.textSecondary),
-                  ),
+                    const SizedBox(height: 24),
+                    // Название
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        _playlist!.name,
+                        style: GoogleFonts.outfit(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (_playlist!.description != null && _playlist!.description!.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 40),
+                        child: Text(
+                          _playlist!.description!,
+                          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
@@ -117,24 +161,59 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
               child: Row(
                 children: [
-                   ElevatedButton.icon(
-                    onPressed: _tracks.isNotEmpty 
-                      ? () => context.read<AudioPlayerController>().playTrack(_tracks.first, playlist: _tracks)
-                      : null,
-                    icon: const Icon(Icons.play_arrow_rounded, size: 28),
-                    label: const Text('Слушать', style: TextStyle(fontSize: 16)),
-                    style: ElevatedButton.styleFrom(
-                       minimumSize: const Size(140, 48),
-                       backgroundColor: AppTheme.accent,
-                       foregroundColor: Colors.black,
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _tracks.isNotEmpty 
+                        ? () => context.read<AudioPlayerController>().playTrack(_tracks.first, playlist: _tracks)
+                        : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accent,
+                        foregroundColor: Colors.black,
+                        minimumSize: const Size(double.infinity, 54),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        elevation: 0,
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.play_arrow_rounded, size: 28),
+                          SizedBox(width: 8),
+                          Text('Слушать', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Text('${_tracks.length} треков', style: const TextStyle(color: AppTheme.textSecondary)),
+                  Container(
+                    height: 54,
+                    width: 54,
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceHighlight,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.shuffle, color: AppTheme.textPrimary),
+                      onPressed: () {
+                        if (_tracks.isNotEmpty) {
+                          final shuffled = List<Track>.from(_tracks)..shuffle();
+                          context.read<AudioPlayerController>().playTrack(shuffled.first, playlist: shuffled);
+                        }
+                      },
+                    ),
+                  ),
                 ],
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Text(
+                '${_tracks.length} треков', 
+                style: const TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -148,15 +227,33 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
               itemCount: _tracks.length,
               itemBuilder: (context, i) {
                 final t = _tracks[i];
-                return ListTile(
-                  leading: TrackArtwork(url: t.artworkUrl, size: 48, radius: 4),
-                  title: Text(t.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.remove_circle_outline, color: AppTheme.textSecondary, size: 20),
-                    onPressed: () => _removeTrack(t),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    leading: TrackArtwork(url: t.artworkUrl, size: 52, radius: 8),
+                    title: Text(
+                      t.title, 
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        t.artist, 
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.remove_circle_outline, color: AppTheme.textSecondary, size: 22),
+                      onPressed: () => _removeTrack(t),
+                    ),
+                    onTap: () => context.read<AudioPlayerController>().playTrack(t, playlist: _tracks),
                   ),
-                  onTap: () => context.read<AudioPlayerController>().playTrack(t, playlist: _tracks),
                 );
               },
             ),

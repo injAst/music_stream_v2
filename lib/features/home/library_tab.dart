@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -117,52 +118,55 @@ class _LibraryTabState extends State<LibraryTab> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 200,
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
-          childAspectRatio: 0.8,
+          maxCrossAxisExtent: 110,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 0.65,
         ),
         delegate: SliverChildBuilderDelegate(
           (context, i) {
             final p = playlists[i];
-            return InkWell(
+            return GestureDetector(
               onTap: () => context.push('/playlist/${p.id}'),
-              borderRadius: BorderRadius.circular(8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
+                  // Квадратная обложка
+                  AspectRatio(
+                    aspectRatio: 1,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: AppTheme.surfaceHighlight,
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          )
-                        ],
+                        color: AppTheme.surfaceHighlight.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        image: p.artworkUrl != null 
+                          ? DecorationImage(
+                              image: NetworkImage(ApiConfig.resolveUrl(p.artworkUrl)!), 
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                       ),
-                      clipBehavior: Clip.antiAlias,
-                      child: p.artworkUrl != null 
-                        ? Image.network(ApiConfig.resolveUrl(p.artworkUrl)!, fit: BoxFit.cover)
-                        : const Center(child: Icon(Icons.music_note, size: 48, color: AppTheme.textSecondary)),
+                      child: p.artworkUrl == null 
+                        ? const Center(child: Icon(Icons.music_note, size: 28, color: AppTheme.textSecondary))
+                        : null,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     p.name, 
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.w600, 
+                      fontSize: 13,
+                      letterSpacing: -0.1,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     '${p.trackCount} треков', 
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                   ),
                 ],
               ),
@@ -176,50 +180,37 @@ class _LibraryTabState extends State<LibraryTab> {
 
   Widget _buildHeader(BuildContext context, List<Track> likedTracks, List<Playlist> playlists) {
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            (_showPlaylists ? Colors.blueGrey : AppTheme.accent).withValues(alpha: 0.3),
-            AppTheme.background,
-          ],
-          stops: const [0.0, 0.8],
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(24, 64, 24, 32),
+      padding: const EdgeInsets.fromLTRB(24, 70, 24, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const CircleAvatar(
+              Text(
+                'Библиотека',
+                style: GoogleFonts.outfit(
+                  fontSize: 32, 
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1,
+                ),
+              ),
+              const Spacer(),
+              CircleAvatar(
                 radius: 20,
                 backgroundColor: AppTheme.surfaceHighlight,
-                child: Icon(Icons.person, color: AppTheme.textSecondary),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                context.read<AuthController>().user?.displayName ?? 'Библиотека',
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                child: ClipOval(
+                  child: context.read<AuthController>().user?.avatarUrl != null 
+                    ? Image.network(ApiConfig.resolveUrl(context.read<AuthController>().user?.avatarUrl)!)
+                    : const Icon(Icons.person, color: AppTheme.textSecondary),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 32),
-          Row(
-            children: [
-              _TabButton(
-                label: 'Любимые треки', 
-                isActive: !_showPlaylists, 
-                onTap: () => setState(() => _showPlaylists = false),
-              ),
-              const SizedBox(width: 12),
-              _TabButton(
-                label: 'Плейлисты', 
-                isActive: _showPlaylists, 
-                onTap: () => setState(() => _showPlaylists = true),
-              ),
-            ],
+          const SizedBox(height: 28),
+          _PremiumTabSwitcher(
+            activeTab: _showPlaylists ? 1 : 0,
+            onTabChanged: (i) => setState(() => _showPlaylists = i == 1),
+            labels: const ['Любимые', 'Плейлисты'], 
           ),
         ],
       ),
@@ -303,30 +294,74 @@ class _LibraryTabState extends State<LibraryTab> {
   }
 }
 
-class _TabButton extends StatelessWidget {
-  const _TabButton({required this.label, required this.isActive, required this.onTap});
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
+class _PremiumTabSwitcher extends StatelessWidget {
+  const _PremiumTabSwitcher({
+    required this.activeTab,
+    required this.onTabChanged,
+    required this.labels,
+  });
+
+  final int activeTab;
+  final ValueChanged<int> onTabChanged;
+  final List<String> labels;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? AppTheme.accent : AppTheme.surfaceHighlight,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isActive ? Colors.black : AppTheme.textPrimary,
-            fontWeight: FontWeight.bold,
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceHighlight.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Stack(
+        children: [
+          // Движущийся индикатор
+          AnimatedAlign(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            alignment: activeTab == 0 ? Alignment.centerLeft : Alignment.centerRight,
+            child: FractionallySizedBox(
+              widthFactor: 0.5,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.accent,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.accent.withValues(alpha: 0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
+          // Сами кнопки
+          Row(
+            children: List.generate(labels.length, (i) {
+              final isActive = activeTab == i;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onTabChanged(i),
+                  behavior: HitTestBehavior.opaque,
+                  child: Center(
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 300),
+                      style: TextStyle(
+                        color: isActive ? Colors.black : AppTheme.textSecondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      child: Text(labels[i]),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
