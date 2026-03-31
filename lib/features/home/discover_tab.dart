@@ -77,12 +77,16 @@ class DiscoverTab extends StatelessWidget {
               ),
 
               if (tracks.isNotEmpty) ...[
-                _buildSectionHeader(context, 'Новые релизы', () {}),
+                _buildSectionHeader(context, 'Новые релизы', () {
+                   _showAllTracks(context, 'Новые релизы', tracks);
+                }),
                 SliverToBoxAdapter(
                   child: _NewReleasesGrid(tracks: tracks),
                 ),
 
-                _buildSectionHeader(context, 'В тренде', () {}),
+                _buildSectionHeader(context, 'В тренде', () {
+                   _showAllTracks(context, 'В тренде', tracks);
+                }),
                 SliverToBoxAdapter(
                   child: SizedBox(
                     height: 200,
@@ -102,7 +106,9 @@ class DiscoverTab extends StatelessWidget {
                   ),
                 ),
 
-                _buildSectionHeader(context, 'Рекомендации', () {}),
+                _buildSectionHeader(context, 'Рекомендации', () {
+                   _showAllTracks(context, 'Рекомендации', tracks.reversed.toList());
+                }),
                 SliverPadding(
                   padding: const EdgeInsets.only(bottom: 120),
                   sliver: SliverList.builder(
@@ -143,6 +149,71 @@ class DiscoverTab extends StatelessWidget {
             TextButton(
               onPressed: onSeeAll,
               child: const Text('Все', style: TextStyle(color: AppTheme.accent, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAllTracks(BuildContext context, String title, List<Track> tracks) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.96,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.w900),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(0, 0, 0, 140),
+                itemCount: tracks.length,
+                itemBuilder: (context, i) {
+                  final t = tracks[i];
+                  return _VerticalTrackTile(
+                    track: t,
+                    onPlay: () {
+                      Navigator.pop(context);
+                      context.read<AudioPlayerController>().playTrack(t, playlist: tracks);
+                    },
+                    onMore: () => _showTrackOptions(context, t),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -804,8 +875,8 @@ class _NewReleasesGrid extends StatelessWidget {
       ratio = 0.70; // Было 0.76
     }
 
-    final items = tracks.length > (crossAxisCount * 2) 
-      ? tracks.sublist(0, crossAxisCount * 2) 
+    final items = tracks.length > crossAxisCount 
+      ? tracks.sublist(0, crossAxisCount) 
       : tracks;
     
     return Padding(
