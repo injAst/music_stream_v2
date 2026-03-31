@@ -1,8 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login_screen.dart';
 import '../../features/auth/register_screen.dart';
 import '../../features/home/home_shell.dart';
+import '../../features/home/authenticated_shell.dart';
 import '../../features/profile/edit_profile_screen.dart';
 import '../../features/profile/user_profile_screen.dart';
 import '../../features/tracks/add_track_screen.dart';
@@ -28,23 +30,28 @@ GoRouter createAppRouter(AuthController auth) {
         path: '/register',
         builder: (_, __) => const RegisterScreen(),
       ),
-      GoRoute(
-        path: '/home',
-        builder: (_, __) => const HomeShell(),
-      ),
-      GoRoute(
-        path: '/add-track',
-        builder: (_, __) => const AddTrackScreen(),
-      ),
-      GoRoute(
-        path: '/edit-profile',
-        builder: (_, __) => const EditProfileScreen(),
-      ),
-      GoRoute(
-        path: '/profile/:id',
-        builder: (_, state) => UserProfileScreen(
-          userId: state.pathParameters['id']!,
-        ),
+      ShellRoute(
+        builder: (context, state, child) => AuthenticatedShell(child: child),
+        routes: [
+          GoRoute(
+            path: '/home',
+            builder: (_, __) => const HomeShell(),
+          ),
+          GoRoute(
+            path: '/add-track',
+            builder: (_, __) => const AddTrackScreen(),
+          ),
+          GoRoute(
+            path: '/edit-profile',
+            builder: (_, __) => const EditProfileScreen(),
+          ),
+          GoRoute(
+            path: '/profile/:id',
+            builder: (_, state) => UserProfileScreen(
+              userId: state.pathParameters['id']!,
+            ),
+          ),
+        ],
       ),
     ],
   );

@@ -112,9 +112,10 @@ class _FullPlayerBodyState extends State<_FullPlayerBody> {
                 onReorder: audio.reorder,
                 itemBuilder: (context, index) {
                   final t = audio.currentPlaylist[index];
-                  final isCurrent = t.id == track.id;
+                  final isCurrent = t.id == (audio.currentTrack?.id ?? '');
                   return ListTile(
                     key: ValueKey(t.id),
+                    onTap: () => audio.jumpTo(index),
                     leading: TrackArtwork(url: t.artworkUrl, size: 40, radius: 4),
                     title: Text(
                       t.title,

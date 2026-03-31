@@ -177,6 +177,18 @@ class AudioPlayerController extends ChangeNotifier {
     }
   }
 
+  Future<void> jumpTo(int index) async {
+    if (index >= 0 && index < _currentPlaylist.length) {
+      try {
+        await _player.seek(Duration.zero, index: index);
+        await _player.play();
+        notifyListeners();
+      } catch (e) {
+        debugPrint('jumpTo error: $e');
+      }
+    }
+  }
+
   Future<void> toggleShuffle() async {
     final newValue = !_player.shuffleModeEnabled;
     await _player.setShuffleModeEnabled(newValue);
