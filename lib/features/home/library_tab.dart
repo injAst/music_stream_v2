@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/config/api_config.dart';
 import '../../data/models/playlist.dart';
 import '../../data/models/track.dart';
 import '../../providers/audio_player_controller.dart';
@@ -148,7 +149,7 @@ class _LibraryTabState extends State<LibraryTab> {
                       ),
                       clipBehavior: Clip.antiAlias,
                       child: p.artworkUrl != null 
-                        ? Image.network(p.artworkUrl!, fit: BoxFit.cover)
+                        ? Image.network(ApiConfig.resolveUrl(p.artworkUrl)!, fit: BoxFit.cover)
                         : const Center(child: Icon(Icons.music_note, size: 48, color: AppTheme.textSecondary)),
                     ),
                   ),

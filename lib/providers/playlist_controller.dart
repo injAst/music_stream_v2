@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../data/models/playlist.dart';
 import '../data/repositories/playlist_repository.dart';
@@ -63,9 +64,16 @@ class PlaylistController extends ChangeNotifier {
     String? name,
     String? description,
     bool? isPublic,
+    String? artworkUrl,
   }) async {
     try {
-      final p = await _repository.updatePlaylist(id, name: name, description: description, isPublic: isPublic);
+      final p = await _repository.updatePlaylist(
+        id, 
+        name: name, 
+        description: description, 
+        isPublic: isPublic,
+        artworkUrl: artworkUrl,
+      );
       final idx = _playlists.indexWhere((pl) => pl.id == id);
       if (idx != -1) {
         _playlists[idx] = p;
@@ -74,6 +82,15 @@ class PlaylistController extends ChangeNotifier {
       return p;
     } catch (e) {
       debugPrint('Error updating playlist: $e');
+      return null;
+    }
+  }
+
+  Future<String?> uploadArtwork(Uint8List bytes, String filename) async {
+    try {
+      return await _repository.uploadArtwork(bytes, filename);
+    } catch (e) {
+      debugPrint('Error uploading artwork: $e');
       return null;
     }
   }

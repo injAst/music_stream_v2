@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../../core/config/api_config.dart';
 import '../models/playlist.dart';
 import '../models/track.dart';
@@ -78,6 +80,7 @@ class PlaylistRepository {
     String? name,
     String? description,
     bool? isPublic,
+    String? artworkUrl,
   }) async {
     final response = await http.patch(
       Uri.parse('${ApiConfig.baseUrl}/playlists/$id'),
@@ -86,6 +89,7 @@ class PlaylistRepository {
         if (name != null) 'name': name,
         if (description != null) 'description': description,
         if (isPublic != null) 'is_public': isPublic,
+        if (artworkUrl != null) 'artwork_url': artworkUrl,
       }),
     );
 
@@ -94,6 +98,27 @@ class PlaylistRepository {
       return Playlist.fromJson(data['playlist']);
     }
     throw Exception('Failed to update playlist: ${response.body}');
+  }
+
+  Future<String> uploadArtwork(Uint8List bytes, String filename) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/upload/artwork');
+    final request = http.MultipartRequest('POST', uri)
+      ..headers.addAll(_headers)
+      ..files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: filename,
+        contentType: MediaType('image', 'jpeg'), // Обобщенно
+      ));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['url'] as String;
+    }
+    throw Exception('Failed to upload artwork: ${response.body}');
   }
 
   Future<void> addTrackToPlaylist(String playlistId, String trackId) async {

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/config/api_config.dart';
 import '../../data/models/playlist.dart';
 import '../../data/models/track.dart';
 import '../../providers/audio_player_controller.dart';
@@ -96,7 +98,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: _playlist!.artworkUrl != null 
-                        ? Image.network(_playlist!.artworkUrl!, fit: BoxFit.cover)
+                        ? Image.network(ApiConfig.resolveUrl(_playlist!.artworkUrl)!, fit: BoxFit.cover)
                         : const Icon(Icons.music_note, size: 80, color: AppTheme.textSecondary),
                   ),
                 ),
@@ -191,59 +193,124 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
   void _showEditDialog() {
     final nameController = TextEditingController(text: _playlist!.name);
     final descController = TextEditingController(text: _playlist!.description ?? '');
+    PlatformFile? selectedFile;
+    bool isUploading = false;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Редактировать плейлист'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameController,
-              decoration: const InputDecoration(
-                labelText: 'Название',
-                labelStyle: TextStyle(color: AppTheme.textSecondary),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.accent)),
-              ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: const Text('Редактировать плейлист'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Предпросмотр обложки
+                GestureDetector(
+                  onTap: () async {
+                    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+                    if (result != null) {
+                      setDialogState(() => selectedFile = result.files.first);
+                    }
+                  },
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceHighlight,
+                      borderRadius: BorderRadius.circular(8),
+                      image: selectedFile != null 
+                        ? DecorationImage(
+                            image: MemoryImage(selectedFile!.bytes!), 
+                            fit: BoxFit.cover,
+                          )
+                        : (_playlist!.artworkUrl != null 
+                            ? DecorationImage(
+                                image: NetworkImage(ApiConfig.resolveUrl(_playlist!.artworkUrl)!), 
+                                fit: BoxFit.cover,
+                              )
+                            : null),
+                    ),
+                    child: (selectedFile == null && _playlist!.artworkUrl == null)
+                        ? const Icon(Icons.add_a_photo_outlined, size: 40)
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () async {
+                    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+                    if (result != null) {
+                      setDialogState(() => selectedFile = result.files.first);
+                    }
+                  },
+                  child: const Text('Выбрать обложку', style: TextStyle(color: AppTheme.accent)),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Название',
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.accent)),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descController,
+                  decoration: const InputDecoration(
+                    labelText: 'Описание',
+                    labelStyle: TextStyle(color: AppTheme.textSecondary),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.accent)),
+                  ),
+                  maxLines: 2,
+                ),
+                if (isUploading) ...[
+                  const SizedBox(height: 16),
+                  const LinearProgressIndicator(color: AppTheme.accent),
+                ],
+              ],
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: descController,
-              decoration: const InputDecoration(
-                labelText: 'Описание',
-                labelStyle: TextStyle(color: AppTheme.textSecondary),
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.accent)),
-              ),
-              maxLines: 2,
+          ),
+          actions: [
+            TextButton(
+              onPressed: isUploading ? null : () => Navigator.pop(context),
+              child: const Text('ОТМЕНА', style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            TextButton(
+              onPressed: isUploading ? null : () async {
+                final newName = nameController.text.trim();
+                if (newName.isEmpty) return;
+
+                setDialogState(() => isUploading = true);
+
+                String? artworkUrl;
+                if (selectedFile != null) {
+                  artworkUrl = await context.read<PlaylistController>().uploadArtwork(
+                    selectedFile!.bytes!, 
+                    selectedFile!.name,
+                  );
+                }
+
+                final updated = await context.read<PlaylistController>().updatePlaylist(
+                  _playlist!.id,
+                  name: newName,
+                  description: descController.text.trim(),
+                  artworkUrl: artworkUrl,
+                );
+
+                if (mounted && updated != null) {
+                  setState(() => _playlist = updated);
+                  Navigator.pop(context);
+                } else {
+                   setDialogState(() => isUploading = false);
+                }
+              },
+              child: const Text('СОХРАНИТЬ', style: TextStyle(color: AppTheme.accent)),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('ОТМЕНА', style: TextStyle(color: AppTheme.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () async {
-              final newName = nameController.text.trim();
-              if (newName.isEmpty) return;
-
-              final updated = await context.read<PlaylistController>().updatePlaylist(
-                _playlist!.id,
-                name: newName,
-                description: descController.text.trim(),
-              );
-
-              if (mounted && updated != null) {
-                setState(() => _playlist = updated);
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('СОХРАНИТЬ', style: TextStyle(color: AppTheme.accent)),
-          ),
-        ],
       ),
     );
   }

@@ -167,6 +167,50 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
     }
   });
 
+  // Загрузка обложки (картинки)
+  router.post('/v1/upload/artwork', (Request req) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Нужна авторизация'}, status: 401);
+
+    final formReq = req.formData();
+    if (formReq == null) return jsonRes({'error': 'Ожидался multipart/form-data'}, status: 400);
+
+    try {
+      String? fileUrl;
+      await for (final data in formReq.formData) {
+        if (data.name == 'file') {
+          final filename = data.filename ?? 'cover.jpg';
+          final sanitized = _sanitizeFileName(filename);
+          final prefix = uid.substring(0, 8);
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final newName = '${prefix}_${timestamp}_$sanitized';
+          
+          final dir = Directory('uploads/artworks');
+          if (!await dir.exists()) await dir.create(recursive: true);
+          
+          final file = File('uploads/artworks/$newName');
+          final sink = file.openWrite();
+          await sink.addStream(data.part);
+          await sink.close();
+          
+          final scheme = req.requestedUri.scheme;
+          final host = req.requestedUri.host;
+          final port = req.requestedUri.port;
+          fileUrl = '$scheme://$host:$port/uploads/artworks/$newName';
+        }
+      }
+
+      if (fileUrl != null) {
+        return jsonRes({'url': fileUrl});
+      } else {
+        return jsonRes({'error': 'Файл с полем "file" не найден'}, status: 400);
+      }
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+
   router.post('/v1/auth/register', (Request req) async {
     try {
       final map = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
@@ -870,6 +914,7 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       final name = body['name'] as String?;
       final description = body['description'] as String?;
       final isPublic = body['is_public'] as bool?;
+      final artworkUrl = body['artwork_url'] as String?;
 
       if (name != null && name.trim().isEmpty) {
         return jsonRes({'error': 'Название не может быть пустым'}, status: 400);
@@ -882,7 +927,8 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
           SET 
             name = COALESCE(@name, name),
             description = COALESCE(@desc, description),
-            is_public = COALESCE(@pub, is_public)
+            is_public = COALESCE(@pub, is_public),
+            artwork_url = COALESCE(@art, artwork_url)
           WHERE id = @id::uuid AND owner_id = @uid::uuid
           RETURNING id::text, name, description, artwork_url, is_public, created_at
           ''',
@@ -893,6 +939,7 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
           'name': name?.trim(),
           'desc': description?.trim(),
           'pub': isPublic,
+          'art': artworkUrl,
         },
       );
 
@@ -901,6 +948,13 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       }
 
       final row = rs.first;
+      // Получаем актуальное количество треков
+      final countRs = await conn.execute(
+        Sql.named('SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = @id::uuid'),
+        parameters: {'id': id},
+      );
+      final count = int.tryParse(countRs.first[0]?.toString() ?? '0') ?? 0;
+
       return jsonRes({
         'playlist': {
           'id': row[0].toString(),
@@ -909,6 +963,7 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
           'artwork_url': row[3],
           'is_public': row[4] == true,
           'created_at': row[5]?.toString(),
+          'track_count': count,
         }
       });
     } catch (e) {
