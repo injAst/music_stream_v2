@@ -102,11 +102,8 @@ class _HomeShellState extends State<HomeShell> {
       onKeyEvent: (event) => _handleKeyEvent(event, audio),
       child: GestureDetector(
         onTap: () {
-          // Убираем фокус с полей ввода при клике в пустое место
-          final currentFocus = FocusScope.of(context);
-          if (!currentFocus.hasPrimaryFocus) {
-            currentFocus.unfocus();
-          }
+          // Принудительно возвращаем фокус плееру при клике в пустое место
+          _shellFocusNode.requestFocus();
         },
         child: Scaffold(
           body: Column(
