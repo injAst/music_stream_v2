@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/login_screen.dart';
@@ -8,6 +7,7 @@ import '../../features/home/authenticated_shell.dart';
 import '../../features/profile/edit_profile_screen.dart';
 import '../../features/profile/user_profile_screen.dart';
 import '../../features/tracks/add_track_screen.dart';
+import '../../features/playlists/playlist_detail_screen.dart';
 import '../../providers/auth_controller.dart';
 
 GoRouter createAppRouter(AuthController auth) {
@@ -49,6 +49,12 @@ GoRouter createAppRouter(AuthController auth) {
             path: '/profile/:id',
             builder: (_, state) => UserProfileScreen(
               userId: state.pathParameters['id']!,
+            ),
+          ),
+          GoRoute(
+            path: '/playlist/:id',
+            builder: (_, state) => PlaylistDetailScreen(
+              playlistId: state.pathParameters['id']!,
             ),
           ),
         ],

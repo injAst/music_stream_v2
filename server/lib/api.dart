@@ -721,5 +721,273 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
     }
   });
 
+  // --- PLAYLISTS ---
+
+  // Список плейлистов текущего пользователя
+  router.get('/v1/playlists', (Request req) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Не авторизован'}, status: 401);
+    try {
+      final rs = await conn.execute(
+        Sql.named(
+          '''
+          SELECT 
+            p.id::text, p.name, p.description, p.artwork_url, p.is_public, p.created_at,
+            (SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = p.id) AS track_count
+          FROM playlists p
+          WHERE p.owner_id = @uid::uuid
+          ORDER BY p.created_at DESC
+          ''',
+        ),
+        parameters: {'uid': uid},
+      );
+      final list = rs.map((row) {
+        return {
+          'id': row[0].toString(),
+          'name': row[1],
+          'description': row[2],
+          'artwork_url': row[3],
+          'is_public': row[4] == true,
+          'created_at': row[5]?.toString(),
+          'track_count': int.tryParse(row[6]?.toString() ?? '0') ?? 0,
+        };
+      }).toList();
+      return jsonRes({'playlists': list});
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  // Создать новый плейлист
+  router.post('/v1/playlists', (Request req) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Не авторизован'}, status: 401);
+    try {
+      final body = jsonDecode(await req.readAsString());
+      final name = (body['name'] as String?)?.trim() ?? '';
+      if (name.isEmpty) return jsonRes({'error': 'Введите название'}, status: 400);
+
+      final rs = await conn.execute(
+        Sql.named(
+          '''
+          INSERT INTO playlists (owner_id, name, description, is_public)
+          VALUES (@uid::uuid, @name, @desc, @pub)
+          RETURNING id::text, name, description, artwork_url, is_public, created_at
+          ''',
+        ),
+        parameters: {
+          'uid': uid,
+          'name': name,
+          'desc': body['description'],
+          'pub': body['is_public'] == true,
+        },
+      );
+      final row = rs.first;
+      return jsonRes({
+        'playlist': {
+          'id': row[0].toString(),
+          'name': row[1],
+          'description': row[2],
+          'artwork_url': row[3],
+          'is_public': row[4] == true,
+          'created_at': row[5]?.toString(),
+          'track_count': 0,
+        }
+      }, status: 201);
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  // Получить детали плейлиста и его треки
+  router.get('/v1/playlists/<id>', (Request req, String id) async {
+    final uid = userIdFromToken(req);
+    final uidStr = uid ?? '';
+    try {
+      final plRs = await conn.execute(
+        Sql.named('SELECT id::text, owner_id::text, name, description, artwork_url, is_public FROM playlists WHERE id = @id::uuid'),
+        parameters: {'id': id},
+      );
+      if (plRs.isEmpty) return jsonRes({'error': 'Плейлист не найден'}, status: 404);
+      final plRow = plRs.first;
+      if (plRow[5] == false && plRow[1] != uidStr) {
+        return jsonRes({'error': 'Доступ ограничен'}, status: 403);
+      }
+
+      final trRs = await conn.execute(
+        Sql.named(
+          '''
+          SELECT 
+            t.id::text, t.title, t.artist, t.stream_url, t.artwork_url, t.duration_seconds,
+            (SELECT COUNT(*) FROM track_likes WHERE track_id = t.id) AS l_count,
+            CASE
+              WHEN @uidStr != '' AND EXISTS(SELECT 1 FROM track_likes WHERE track_id = t.id AND user_id::text = @uidStr)
+              THEN true ELSE false
+            END AS is_l
+          FROM playlist_tracks pt
+          JOIN tracks t ON pt.track_id = t.id
+          WHERE pt.playlist_id = @id::uuid
+          ORDER BY pt.position, pt.added_at
+          ''',
+        ),
+        parameters: {'id': id, 'uidStr': uidStr},
+      );
+
+      final tracks = trRs.map((row) {
+        return {
+          'id': row[0].toString(),
+          'title': row[1].toString(),
+          'artist': row[2].toString(),
+          'stream_url': row[3].toString(),
+          'artwork_url': row[4],
+          'duration_seconds': row[5],
+          'likes_count': int.tryParse(row[6]?.toString() ?? '0') ?? 0,
+          'is_liked': row[7] == true,
+        };
+      }).toList();
+
+      return jsonRes({
+        'playlist': {
+          'id': plRow[0],
+          'name': plRow[2],
+          'description': plRow[3],
+          'artwork_url': plRow[4],
+          'is_public': plRow[5],
+        },
+        'tracks': tracks,
+      });
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  // Редактировать плейлист
+  router.patch('/v1/playlists/<id>', (Request req, String id) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Не авторизован'}, status: 401);
+    try {
+      final body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
+      final name = body['name'] as String?;
+      final description = body['description'] as String?;
+      final isPublic = body['is_public'] as bool?;
+
+      if (name != null && name.trim().isEmpty) {
+        return jsonRes({'error': 'Название не может быть пустым'}, status: 400);
+      }
+
+      final rs = await conn.execute(
+        Sql.named(
+          '''
+          UPDATE playlists 
+          SET 
+            name = COALESCE(@name, name),
+            description = COALESCE(@desc, description),
+            is_public = COALESCE(@pub, is_public)
+          WHERE id = @id::uuid AND owner_id = @uid::uuid
+          RETURNING id::text, name, description, artwork_url, is_public, created_at
+          ''',
+        ),
+        parameters: {
+          'id': id,
+          'uid': uid,
+          'name': name?.trim(),
+          'desc': description?.trim(),
+          'pub': isPublic,
+        },
+      );
+
+      if (rs.isEmpty) {
+        return jsonRes({'error': 'Плейлист не найден или нет прав'}, status: 404);
+      }
+
+      final row = rs.first;
+      return jsonRes({
+        'playlist': {
+          'id': row[0].toString(),
+          'name': row[1],
+          'description': row[2],
+          'artwork_url': row[3],
+          'is_public': row[4] == true,
+          'created_at': row[5]?.toString(),
+        }
+      });
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  // Удалить плейлист
+  router.delete('/v1/playlists/<id>', (Request req, String id) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Не авторизован'}, status: 401);
+    try {
+      final rs = await conn.execute(
+        Sql.named('DELETE FROM playlists WHERE id = @id::uuid AND owner_id = @uid::uuid RETURNING id'),
+        parameters: {'id': id, 'uid': uid},
+      );
+      if (rs.isEmpty) return jsonRes({'error': 'Плейлист не найден или нет прав'}, status: 404);
+      return jsonRes({'ok': true});
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  // Добавить трек в плейлист
+  router.post('/v1/playlists/<id>/tracks', (Request req, String id) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Не авторизован'}, status: 401);
+    try {
+      final body = jsonDecode(await req.readAsString());
+      final trackId = body['track_id'] as String?;
+      if (trackId == null) return jsonRes({'error': 'track_id required'}, status: 400);
+
+      // Проверка прав на плейлист
+      final plCheck = await conn.execute(
+        Sql.named('SELECT id FROM playlists WHERE id = @id::uuid AND owner_id = @uid::uuid'),
+        parameters: {'id': id, 'uid': uid},
+      );
+      if (plCheck.isEmpty) return jsonRes({'error': 'Плейлист не найден или нет прав'}, status: 404);
+
+      // Получаем текущую макс позицию
+      final posRs = await conn.execute(
+        Sql.named('SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_tracks WHERE playlist_id = @id::uuid'),
+        parameters: {'id': id},
+      );
+      final pos = posRs.first[0] as int;
+
+      await conn.execute(
+        Sql.named('INSERT INTO playlist_tracks (playlist_id, track_id, position) VALUES (@pid::uuid, @tid::uuid, @pos) ON CONFLICT DO NOTHING'),
+        parameters: {'pid': id, 'tid': trackId, 'pos': pos},
+      );
+      return jsonRes({'ok': true});
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
+  // Удалить трек из плейлиста
+  router.delete('/v1/playlists/<id>/tracks/<trackId>', (Request req, String id, String trackId) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Не авторизован'}, status: 401);
+    try {
+      final rs = await conn.execute(
+        Sql.named(
+          '''
+          DELETE FROM playlist_tracks 
+          WHERE playlist_id = @pid::uuid 
+            AND track_id = @tid::uuid
+            AND EXISTS (SELECT 1 FROM playlists WHERE id = @pid::uuid AND owner_id = @uid::uuid)
+          RETURNING track_id
+          ''',
+        ),
+        parameters: {'pid': id, 'tid': trackId, 'uid': uid},
+      );
+      if (rs.isEmpty) return jsonRes({'error': 'Трек не найден или нет прав'}, status: 404);
+      return jsonRes({'ok': true});
+    } catch (e) {
+      return jsonRes({'error': e.toString()}, status: 500);
+    }
+  });
+
   return router.call;
 }

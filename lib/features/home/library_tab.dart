@@ -1,13 +1,15 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../data/models/playlist.dart';
 import '../../data/models/track.dart';
 import '../../providers/audio_player_controller.dart';
 import '../../providers/auth_controller.dart';
 import '../../providers/library_controller.dart';
-import '../../providers/navigation_controller.dart';
+import '../../providers/playlist_controller.dart';
 import '../widgets/track_artwork.dart';
 
 class LibraryTab extends StatefulWidget {
@@ -19,200 +21,269 @@ class LibraryTab extends StatefulWidget {
 
 class _LibraryTabState extends State<LibraryTab> {
   String _searchQuery = '';
+  bool _showPlaylists = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<PlaylistController>().fetchPlaylists();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      body: Consumer<LibraryController>(
-        builder: (context, lib, _) {
-          if (lib.isLoading) {
+      body: Consumer2<LibraryController, PlaylistController>(
+        builder: (context, lib, plc, _) {
+          if (lib.isLoading && plc.isLoading && lib.tracks.isEmpty) {
             return const Center(child: CircularProgressIndicator(color: AppTheme.accent));
           }
 
-          // Показываем только лайкнутые треки
-          var tracks = lib.tracks.where((t) => t.isLiked).toList();
-          if (_searchQuery.trim().isNotEmpty) {
-            final q = _searchQuery.trim().toLowerCase();
-            tracks = tracks.where((t) => 
-               t.title.toLowerCase().contains(q) || 
-               t.artist.toLowerCase().contains(q)).toList();
-          }
+          final likedTracks = lib.tracks.where((t) => t.isLiked).toList();
+          final playlists = plc.playlists;
 
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
             slivers: [
-              // Шапка плейлиста с градиентом
+              // Шапка с переключателем
               SliverToBoxAdapter(
-                child: _buildHeader(context, tracks),
+                child: _buildHeader(context, likedTracks, playlists),
               ),
 
-              // Строка поиска
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _StickySearchBarDelegate(
-                  onSearch: (v) => setState(() => _searchQuery = v),
-                ),
-              ),
-
-              // Список треков
-              if (tracks.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _buildEmptyState(),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.only(top: 8),
-                  sliver: SliverList.builder(
-                    itemCount: tracks.length,
-                    itemBuilder: (context, i) {
-                      final t = tracks[i];
-                      return _TrackTile(
-                        track: t,
-                        onPlay: () => context.read<AudioPlayerController>().playTrack(t, playlist: tracks),
-                        onLongPress: () => _showTrackOptions(context, t),
-                      );
-                    },
+              // Строка поиска (только для треков)
+              if (!_showPlaylists)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _StickySearchBarDelegate(
+                    onSearch: (v) => setState(() => _searchQuery = v),
                   ),
                 ),
+
+              // Основной контент
+              if (_showPlaylists)
+                _buildPlaylistGrid(context, playlists)
+              else
+                _buildTrackList(context, likedTracks),
                 
               const SliverToBoxAdapter(child: SizedBox(height: 120)),
             ],
           );
         },
       ),
+      floatingActionButton: _showPlaylists ? FloatingActionButton(
+        onPressed: () => _showCreatePlaylistDialog(context),
+        backgroundColor: AppTheme.accent,
+        foregroundColor: Colors.black,
+        child: const Icon(Icons.add),
+      ) : null,
     );
   }
 
-  Widget _buildHeader(BuildContext context, List<Track> tracks) {
-    final auth = context.read<AuthController>();
-    final username = auth.user?.displayName ?? 'Пользователь';
+  Widget _buildTrackList(BuildContext context, List<Track> allTracks) {
+    var tracks = allTracks;
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
+      tracks = tracks.where((t) => 
+         t.title.toLowerCase().contains(q) || 
+         t.artist.toLowerCase().contains(q)).toList();
+    }
 
-    final isDesktop = MediaQuery.of(context).size.width > 600;
-    final theme = Theme.of(context);
+    if (tracks.isEmpty && _searchQuery.isEmpty) {
+       return SliverFillRemaining(hasScrollBody: false, child: _buildEmptyTracksState());
+    }
 
+    return SliverPadding(
+      padding: const EdgeInsets.only(top: 8),
+      sliver: SliverList.builder(
+        itemCount: tracks.length,
+        itemBuilder: (context, i) {
+          final t = tracks[i];
+          return _TrackTile(
+            track: t,
+            onPlay: () => context.read<AudioPlayerController>().playTrack(t, playlist: tracks),
+            onLongPress: () => _showTrackOptions(context, t),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPlaylistGrid(BuildContext context, List<Playlist> playlists) {
+    if (playlists.isEmpty) {
+      return SliverFillRemaining(hasScrollBody: false, child: _buildEmptyPlaylistsState());
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.all(16),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 200,
+          mainAxisSpacing: 16,
+          crossAxisSpacing: 16,
+          childAspectRatio: 0.8,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, i) {
+            final p = playlists[i];
+            return InkWell(
+              onTap: () => context.push('/playlist/${p.id}'),
+              borderRadius: BorderRadius.circular(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceHighlight,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          )
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: p.artworkUrl != null 
+                        ? Image.network(p.artworkUrl!, fit: BoxFit.cover)
+                        : const Center(child: Icon(Icons.music_note, size: 48, color: AppTheme.textSecondary)),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    p.name, 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${p.trackCount} треков', 
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+                  ),
+                ],
+              ),
+            );
+          },
+          childCount: playlists.length,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, List<Track> likedTracks, List<Playlist> playlists) {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AppTheme.accent.withValues(alpha: 0.3),
+            (_showPlaylists ? Colors.blueGrey : AppTheme.accent).withValues(alpha: 0.3),
             AppTheme.background,
           ],
           stops: const [0.0, 0.8],
         ),
       ),
       padding: const EdgeInsets.fromLTRB(24, 64, 24, 32),
-      child: isDesktop 
-        ? Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              _buildCoverImage(size: 232),
-              const SizedBox(width: 32),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Text('ПЛЕЙЛИСТ', style: theme.textTheme.labelMedium?.copyWith(
-                      color: AppTheme.textSecondary,
-                      letterSpacing: 1.5,
-                      fontWeight: FontWeight.bold,
-                    )),
-                    const SizedBox(height: 8),
-                    const Text('Мне нравится', style: TextStyle(
-                      fontSize: 72, 
-                      fontWeight: FontWeight.w900, 
-                      height: 1.0,
-                      letterSpacing: -2,
-                    )),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 12,
-                          backgroundColor: AppTheme.surfaceHighlight,
-                          child: Icon(Icons.person, size: 16, color: AppTheme.textSecondary),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(username, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.circle, size: 4, color: AppTheme.textSecondary),
-                        const SizedBox(width: 8),
-                        Text('${tracks.length} треков', style: const TextStyle(color: AppTheme.textSecondary)),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    _HeaderActions(tracks: tracks),
-                  ],
-                ),
+              const CircleAvatar(
+                radius: 20,
+                backgroundColor: AppTheme.surfaceHighlight,
+                child: Icon(Icons.person, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                context.read<AuthController>().user?.displayName ?? 'Библиотека',
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
             ],
-          )
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          const SizedBox(height: 32),
+          Row(
             children: [
-               Center(child: _buildCoverImage(size: MediaQuery.of(context).size.width * 0.55)),
-               const SizedBox(height: 32),
-               Text('ПЛЕЙЛИСТ', style: theme.textTheme.labelSmall?.copyWith(
-                 color: AppTheme.textSecondary,
-                 letterSpacing: 1.2,
-                 fontWeight: FontWeight.bold,
-               )),
-               const SizedBox(height: 4),
-               const Text('Мне нравится', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
-               const SizedBox(height: 12),
-               Row(
-                 children: [
-                   Text(username, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                   const SizedBox(width: 8),
-                   const Icon(Icons.circle, size: 4, color: AppTheme.textSecondary),
-                   const SizedBox(width: 8),
-                   Text('${tracks.length} треков', style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
-                 ],
-               ),
-               const SizedBox(height: 24),
-               _HeaderActions(tracks: tracks),
+              _TabButton(
+                label: 'Любимые треки', 
+                isActive: !_showPlaylists, 
+                onTap: () => setState(() => _showPlaylists = false),
+              ),
+              const SizedBox(width: 12),
+              _TabButton(
+                label: 'Плейлисты', 
+                isActive: _showPlaylists, 
+                onTap: () => setState(() => _showPlaylists = true),
+              ),
             ],
           ),
+        ],
+      ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyTracksState() {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceHighlight,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.favorite_border_rounded, size: 64, color: AppTheme.textSecondary),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Здесь будет ваша музыка',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
+          const Icon(Icons.favorite_border_rounded, size: 64, color: AppTheme.textSecondary),
+          const SizedBox(height: 16),
+          const Text('Нет любимых треков', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          const Text(
-            'Добавляйте треки в "Мне нравится",\nчтобы они всегда были под рукой.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textSecondary),
-          ),
-          const SizedBox(height: 32),
+          const Text('Нажмите на сердечко у любого трека', style: TextStyle(color: AppTheme.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyPlaylistsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.playlist_add_rounded, size: 64, color: AppTheme.textSecondary),
+          const SizedBox(height: 16),
+          const Text('У вас пока нет плейлистов', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: () => context.read<NavigationController>().setIndex(0),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.textPrimary,
-              foregroundColor: AppTheme.background,
-              minimumSize: const Size(180, 48),
-            ),
-            child: const Text('Найти что-нибудь'),
+            onPressed: () => _showCreatePlaylistDialog(context),
+            child: const Text('Создать первый'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCreatePlaylistDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: const Text('Новый плейлист'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Название',
+            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppTheme.accent)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('ОТМЕНА', style: TextStyle(color: AppTheme.textSecondary))),
+          TextButton(
+            onPressed: () {
+              final name = controller.text.trim();
+              if (name.isNotEmpty) {
+                context.read<PlaylistController>().createPlaylist(name);
+                Navigator.pop(context);
+              }
+            }, 
+            child: const Text('СОЗДАТЬ', style: TextStyle(color: AppTheme.accent)),
           ),
         ],
       ),
@@ -220,35 +291,76 @@ class _LibraryTabState extends State<LibraryTab> {
   }
 
   void _showTrackOptions(BuildContext context, Track track) {
-    showModalBottomSheet(
+     showModalBottomSheet(
       context: context,
       backgroundColor: AppTheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  TrackArtwork(url: track.artworkUrl, size: 56, radius: 4),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(track.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary)),
-                      ],
-                    ),
+      builder: (context) => _TrackOptionsSheet(track: track),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  const _TabButton({required this.label, required this.isActive, required this.onTap});
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppTheme.accent : AppTheme.surfaceHighlight,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isActive ? Colors.black : AppTheme.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TrackOptionsSheet extends StatelessWidget {
+  const _TrackOptionsSheet({required this.track});
+  final Track track;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                TrackArtwork(url: track.artworkUrl, size: 56, radius: 4),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(track.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary)),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Divider(),
+          ),
+          const Divider(),
+          if (track.isLiked)
             ListTile(
               leading: const Icon(Icons.favorite, color: Colors.redAccent),
               title: const Text('Удалить из любимых'),
@@ -256,89 +368,146 @@ class _LibraryTabState extends State<LibraryTab> {
                 Navigator.pop(context);
                 context.read<LibraryController>().toggleLike(track.id);
               },
-            ),
+            )
+          else
             ListTile(
-              leading: const Icon(Icons.playlist_add),
-              title: const Text('Добавить в плейлист'),
+              leading: const Icon(Icons.favorite_border),
+              title: const Text('В любимые треки'),
               onTap: () {
                 Navigator.pop(context);
-                // TODO: Implement playlists
+                context.read<LibraryController>().toggleLike(track.id);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: const Text('Поделиться'),
-              onTap: () {
-                Navigator.pop(context);
-              },
+          ListTile(
+            leading: const Icon(Icons.playlist_add),
+            title: const Text('Добавить в плейлист'),
+            onTap: () {
+              Navigator.pop(context);
+              _showAddToPlaylistPicker(context, track);
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  void _showAddToPlaylistPicker(BuildContext context, Track track) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scroll) => Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Выберите плейлист', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             ),
-            const SizedBox(height: 8),
+            Expanded(
+              child: Consumer<PlaylistController>(
+                builder: (context, plc, _) {
+                  if (plc.playlists.isEmpty) {
+                    return const Center(child: Text('У вас пока нет плейлистов'));
+                  }
+                  return ListView.builder(
+                    controller: scroll,
+                    itemCount: plc.playlists.length,
+                    itemBuilder: (context, i) {
+                      final p = plc.playlists[i];
+                      return ListTile(
+                        leading: Container(
+                          width: 40, height: 40, 
+                          decoration: BoxDecoration(color: AppTheme.surfaceHighlight, borderRadius: BorderRadius.circular(4)),
+                          child: const Icon(Icons.music_note, size: 20),
+                        ),
+                        title: Text(p.name),
+                        subtitle: Text('${p.trackCount} треков'),
+                        onTap: () {
+                          plc.addTrackToPlaylist(p.id, track.id);
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Добавлено в "${p.name}"'), backgroundColor: AppTheme.accent),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildCoverImage({required double size}) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-           BoxShadow(
-             color: Colors.black.withValues(alpha: 0.5),
-             blurRadius: 20,
-             offset: const Offset(0, 10),
-           ),
-        ]
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Image.asset(
-        'assets/images/heart_cover.png',
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(color: AppTheme.surfaceHighlight),
-      ),
-    );
-  }
-
 }
 
-class _HeaderActions extends StatelessWidget {
-  const _HeaderActions({required this.tracks});
-  final List<Track> tracks;
+// ... _TrackTile, _StickySearchBarDelegate remain similar to before but updated for new context
+class _TrackTile extends StatelessWidget {
+  const _TrackTile({
+    required this.track, 
+    required this.onPlay,
+    this.onLongPress,
+  });
+
+  final Track track;
+  final VoidCallback onPlay;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    final hasTracks = tracks.isNotEmpty;
-    
-    return Row(
-      children: [
-        ElevatedButton.icon(
-          onPressed: hasTracks 
-            ? () => context.read<AudioPlayerController>().playTrack(tracks.first, playlist: tracks)
-            : null,
-          icon: const Icon(Icons.play_arrow_rounded, size: 28),
-          label: const Text('Слушать', style: TextStyle(fontSize: 16)),
-          style: ElevatedButton.styleFrom(
-             minimumSize: const Size(140, 48),
-             padding: const EdgeInsets.symmetric(horizontal: 24),
-          ),
+    final isPlayingThis = context.select<AudioPlayerController, bool>(
+      (audio) => audio.currentTrack?.id == track.id,
+    );
+
+    return InkWell(
+      onTap: onPlay,
+      onLongPress: onLongPress,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+        decoration: BoxDecoration(
+          color: isPlayingThis ? AppTheme.accent.withValues(alpha: 0.05) : Colors.transparent,
         ),
-        const SizedBox(width: 16),
-        IconButton(
-          onPressed: hasTracks 
-            ? () async {
-                final audio = context.read<AudioPlayerController>();
-                // Включаем перемешивание и запускаем первый случайный трек
-                if (!audio.shuffleEnabled) await audio.toggleShuffle();
-                audio.playTrack(tracks[0], playlist: tracks);
-              }
-            : null,
-          icon: const Icon(Icons.shuffle),
-          color: AppTheme.textSecondary,
+        child: Row(
+          children: [
+            TrackArtwork(url: track.artworkUrl, size: 52, radius: 4),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Text(
+                     track.title,
+                     style: TextStyle(
+                       fontSize: 16, 
+                       fontWeight: isPlayingThis ? FontWeight.bold : FontWeight.w500,
+                       color: isPlayingThis ? AppTheme.accent : AppTheme.textPrimary,
+                     ),
+                     maxLines: 1, 
+                     overflow: TextOverflow.ellipsis,
+                   ),
+                   const SizedBox(height: 4),
+                   Text(
+                     track.artist,
+                     style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                     maxLines: 1, 
+                     overflow: TextOverflow.ellipsis,
+                   ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary, size: 20),
+              onPressed: onLongPress,
+            )
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -365,18 +534,7 @@ class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
           filled: true,
           fillColor: AppTheme.surfaceHighlight,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: AppTheme.accent, width: 1),
-          )
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
         ),
       ),
     );
@@ -384,115 +542,4 @@ class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _StickySearchBarDelegate oldDelegate) => false;
-}
-
-class _TrackTile extends StatelessWidget {
-  const _TrackTile({
-    required this.track, 
-    required this.onPlay,
-    this.onLongPress,
-  });
-
-  final Track track;
-  final VoidCallback onPlay;
-  final VoidCallback? onLongPress;
-
-  @override
-  Widget build(BuildContext context) {
-    final isPlayingThis = context.select<AudioPlayerController, bool>(
-      (audio) => audio.currentTrack?.id == track.id,
-    );
-
-    return InkWell(
-      onTap: onPlay,
-      onLongPress: onLongPress,
-      splashColor: AppTheme.accent.withValues(alpha: 0.1),
-      highlightColor: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-        decoration: BoxDecoration(
-          color: isPlayingThis ? AppTheme.accent.withValues(alpha: 0.05) : Colors.transparent,
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 52,
-              height: 52,
-              child: Stack(
-                children: [
-                   TrackArtwork(url: track.artworkUrl, size: 52, radius: 4),
-                   if (isPlayingThis)
-                     Container(
-                       decoration: BoxDecoration(
-                         color: Colors.black.withValues(alpha: 0.6),
-                         borderRadius: BorderRadius.circular(4),
-                       ),
-                       child: const Center(
-                         child: Icon(Icons.volume_up_rounded, color: AppTheme.accent, size: 24),
-                       ),
-                     ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                   Text(
-                     track.title,
-                     style: TextStyle(
-                       fontSize: 16, 
-                       fontWeight: isPlayingThis ? FontWeight.bold : FontWeight.w500,
-                       color: isPlayingThis ? AppTheme.accent : AppTheme.textPrimary,
-                     ),
-                     maxLines: 1, 
-                     overflow: TextOverflow.ellipsis,
-                   ),
-                   const SizedBox(height: 4),
-                   Text(
-                     track.artist,
-                     style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-                     maxLines: 1, 
-                     overflow: TextOverflow.ellipsis,
-                   ),
-                ],
-              ),
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                 IconButton(
-                   icon: Icon(track.isLiked ? Icons.favorite : Icons.favorite_border, size: 20),
-                   color: track.isLiked ? AppTheme.accent : AppTheme.textSecondary,
-                   onPressed: () => context.read<LibraryController>().toggleLike(track.id),
-                 ),
-                 const SizedBox(width: 4),
-                 Text(
-                   _formatSec(track.durationSeconds),
-                   style: const TextStyle(
-                     color: AppTheme.textSecondary, 
-                     fontSize: 13, 
-                     fontFeatures: [FontFeature.tabularFigures()],
-                   ),
-                 ),
-                 const SizedBox(width: 4),
-                 IconButton(
-                   icon: const Icon(Icons.more_vert, color: AppTheme.textSecondary, size: 20),
-                   onPressed: onLongPress,
-                 )
-              ],
-            )
-          ],
-        ),
-      ),
-    );
-  }
-  
-  String _formatSec(int? sec) {
-    if (sec == null || sec == 0) return '--:--';
-    final m = sec ~/ 60;
-    final s = sec % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
-  }
 }

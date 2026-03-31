@@ -25,6 +25,7 @@ class AuthController extends ChangeNotifier {
 
   UserProfile? get user => _user;
   bool get isLoggedIn => _user != null;
+  String? get token => _repo.currentToken;
 
   Future<void> init() async {
     // 1. Мгновенная загрузка из кэша

@@ -10,6 +10,7 @@ import 'providers/audio_player_controller.dart';
 import 'providers/auth_controller.dart';
 import 'providers/library_controller.dart';
 import 'providers/navigation_controller.dart';
+import 'providers/playlist_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +41,10 @@ Future<void> main() async {
         ),
         ChangeNotifierProvider(
           create: (_) => NavigationController(),
+        ),
+        ChangeNotifierProxyProvider<AuthController, PlaylistController>(
+          create: (context) => PlaylistController(auth: context.read<AuthController>()),
+          update: (context, auth, previous) => PlaylistController(auth: auth),
         ),
       ],
       child: PulseMusicApp(router: router),

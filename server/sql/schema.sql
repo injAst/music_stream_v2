@@ -53,3 +53,24 @@ CREATE TABLE IF NOT EXISTS track_likes (
 
 CREATE INDEX IF NOT EXISTS idx_likes_track ON track_likes (track_id);
 CREATE INDEX IF NOT EXISTS idx_likes_user ON track_likes (user_id);
+
+CREATE TABLE IF NOT EXISTS playlists (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id UUID NOT NULL REFERENCES app_users (id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  artwork_url TEXT,
+  is_public BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS playlist_tracks (
+  playlist_id UUID REFERENCES playlists (id) ON DELETE CASCADE,
+  track_id UUID REFERENCES tracks (id) ON DELETE CASCADE,
+  position INT NOT NULL,
+  added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (playlist_id, track_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_playlists_owner ON playlists (owner_id);
+CREATE INDEX IF NOT EXISTS idx_playlist_tracks_playlist ON playlist_tracks (playlist_id);
