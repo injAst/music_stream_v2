@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -70,9 +71,9 @@ class DiscoverTab extends StatelessWidget {
               // Поиск
               const SliverToBoxAdapter(child: _GlobalSearchSection()),
 
-              // 1. Featured Carousel
+              // 1. Поток (вместо карусели)
               SliverToBoxAdapter(
-                child: _FeaturedCarousel(tracks: tracks),
+                child: _FlowHero(tracks: tracks),
               ),
 
               if (tracks.isNotEmpty) ...[
@@ -207,108 +208,577 @@ class DiscoverTab extends StatelessWidget {
 
 // ─── Sub Widgets ───────────────────────────────────────────────────────────
 
-class _FeaturedCarousel extends StatelessWidget {
-  const _FeaturedCarousel({required this.tracks});
+enum _FlowPatternType { nebula, aurora, waves, vortex, stardust }
+
+class _FlowHero extends StatefulWidget {
+  const _FlowHero({required this.tracks});
   final List<Track> tracks;
 
   @override
+  State<_FlowHero> createState() => _FlowHeroState();
+}
+
+class _FlowHeroState extends State<_FlowHero> with TickerProviderStateMixin {
+  late AnimationController _mainAnimController;
+  late AnimationController _themeTransitionController;
+  late AnimationController _patternTransitionController;
+  
+  int _currentThemeIndex = 0;
+  _FlowPatternType _currentPattern = _FlowPatternType.nebula;
+  _FlowPatternType _prevPattern = _FlowPatternType.nebula;
+  
+  Timer? _cycleTimer;
+
+  static const List<List<Color>> _palettes = [
+    [Color(0xFF1E3A8A), Color(0xFF4C1D95), Color(0xFFFACC15), Color(0xFF0D9488)], // Cosmos
+    [Color(0xFFFF4E50), Color(0xFFE94E77), Color(0xFFF9D423), Color(0xFFFF8C00)], // Sunset
+    [Color(0xFF0891B2), Color(0xFF1E40AF), Color(0xFF0284C7), Color(0xFF06B6D4)], // Ocean
+    [Color(0xFF4338CA), Color(0xFF7C3AED), Color(0xFFDB2777), Color(0xFF2563EB)], // Neon Night
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _mainAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 25), // Медленное, медитативное движение
+    )..repeat();
+
+    _themeTransitionController = AnimationController(
+       vsync: this,
+       duration: const Duration(seconds: 8), // Очень плавный переход цвета (8 сек)
+    )..value = 1.0;
+
+    _patternTransitionController = AnimationController(
+       vsync: this,
+       duration: const Duration(seconds: 6), // Длительный кросс-фейд паттернов
+    )..value = 1.0;
+
+    _startCycling();
+  }
+
+  void _startCycling() {
+    _cycleTimer = Timer.periodic(const Duration(seconds: 45), (timer) {
+      if (mounted) {
+        setState(() {
+            _currentThemeIndex = (_currentThemeIndex + 1) % _palettes.length;
+            
+            // Смена паттерна каждый цикл темы (10 сек) для теста
+            _prevPattern = _currentPattern;
+            _currentPattern = _FlowPatternType.values[(_currentPattern.index + 1) % _FlowPatternType.values.length];
+            _patternTransitionController.forward(from: 0.0);
+        });
+        _themeTransitionController.forward(from: 0.0);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _mainAnimController.dispose();
+    _themeTransitionController.dispose();
+    _patternTransitionController.dispose();
+    _cycleTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (tracks.isEmpty) return const SizedBox.shrink();
+    if (widget.tracks.isEmpty) return const SizedBox.shrink();
     
-    final width = MediaQuery.of(context).size.width;
-    final carouselHeight = width > 1200 ? 320.0 : (width > 600 ? 280.0 : 220.0);
-    
-    return Container(
-      height: carouselHeight,
-      margin: const EdgeInsets.only(top: 16),
-      alignment: Alignment.center,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1200),
-        child: PageView.builder(
-          itemCount: tracks.length > 5 ? 5 : tracks.length,
-          controller: PageController(viewportFraction: width > 900 ? 0.8 : 0.9),
-          itemBuilder: (context, i) {
-            final track = tracks[i];
-            return GestureDetector(
-              onTap: () => context.read<AudioPlayerController>().playTrack(track, playlist: tracks),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    TrackArtwork(url: track.artworkUrl, size: 400, radius: 0, heroTag: 'feat_${track.id}'),
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withValues(alpha: 0.8),
-                          ],
+    final isPlaying = context.select<AudioPlayerController, bool>((audio) => audio.isPlaying);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Container(
+        height: 220,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(32),
+          color: const Color(0xFF020202),
+          boxShadow: [
+             BoxShadow(
+              color: Colors.black.withValues(alpha: 0.8),
+              blurRadius: 30,
+              offset: const Offset(0, 15),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          children: [
+            // Фоновые слои туманности/волн с кросс-фейдом паттернов
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_mainAnimController, _themeTransitionController, _patternTransitionController]),
+                builder: (context, child) {
+                  final lerpTheme = _themeTransitionController.value;
+                  final prevThemeIndex = (_currentThemeIndex - 1 + _palettes.length) % _palettes.length;
+                  final currentColors = List.generate(4, (i) => 
+                     Color.lerp(_palettes[prevThemeIndex][i], _palettes[_currentThemeIndex][i], lerpTheme)!
+                  );
+
+                  return Stack(
+                    children: [
+                      // Старый паттерн (уходящий)
+                      if (_patternTransitionController.value < 1.0)
+                        Opacity(
+                          opacity: 1.0 - _patternTransitionController.value,
+                          child: _buildPatternPainter(_prevPattern, currentColors, isPlaying),
                         ),
+                      // Новый паттерн (приходящий)
+                      Opacity(
+                        opacity: _patternTransitionController.value,
+                        child: _buildPatternPainter(_currentPattern, currentColors, isPlaying),
                       ),
-                    ),
-                    Positioned(
-                      left: 24,
-                      bottom: 24,
-                      right: 24,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppTheme.accent,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text(
-                              'ХИТ НЕДЕЛИ',
-                              style: TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            track.title,
-                            style: GoogleFonts.outfit(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            track.artist,
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white.withValues(alpha: 0.8),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            
+            // Слой стекла
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(32),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Colors.white.withValues(alpha: 0.1),
+                          Colors.white.withValues(alpha: 0.02),
+                          Colors.transparent,
                         ],
                       ),
                     ),
-                  ],
+                    child: CustomPaint(painter: _GrainPainter(opacity: 0.03)),
+                  ),
                 ),
               ),
-            );
-          },
+            ),
+            
+            // Убрали граненый блик (белую обводку) по просьбе пользователя
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(
+                          children: [
+                             const Icon(Icons.auto_awesome, color: AppTheme.accent, size: 14),
+                             const SizedBox(width: 8),
+                             Text(
+                              'ETERNAL FLOW ENGINE 3.1',
+                              style: GoogleFonts.outfit(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white.withValues(alpha: 0.7),
+                                letterSpacing: 2.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Поток',
+                          style: GoogleFonts.outfit(
+                            fontSize: 48,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: -1.5,
+                            height: 0.9,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Микс бесконечных миров',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _NebulaPlayButton(
+                    isPlaying: isPlaying,
+                    onTap: () => context.read<AudioPlayerController>().playWave(widget.tracks),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
+
+  Widget _buildPatternPainter(_FlowPatternType pattern, List<Color> colors, bool isPlaying) {
+    switch (pattern) {
+      case _FlowPatternType.nebula:
+        return CustomPaint(
+          painter: _NebulaBackgroundPainter(
+            animationValue: _mainAnimController.value,
+            isPlaying: isPlaying,
+            colors: colors,
+          ),
+          size: Size.infinite,
+        );
+      case _FlowPatternType.aurora:
+        return CustomPaint(
+          painter: _AuroraBackgroundPainter(
+            animationValue: _mainAnimController.value,
+            isPlaying: isPlaying,
+            colors: colors,
+          ),
+          size: Size.infinite,
+        );
+      case _FlowPatternType.waves:
+        return CustomPaint(
+          painter: _WavesBackgroundPainter(
+            animationValue: _mainAnimController.value,
+            isPlaying: isPlaying,
+            colors: colors,
+          ),
+          size: Size.infinite,
+        );
+      case _FlowPatternType.vortex:
+        return CustomPaint(
+          painter: _VortexBackgroundPainter(
+            animationValue: _mainAnimController.value,
+            isPlaying: isPlaying,
+            colors: colors,
+          ),
+          size: Size.infinite,
+        );
+      case _FlowPatternType.stardust:
+        return CustomPaint(
+          painter: _StardustBackgroundPainter(
+            animationValue: _mainAnimController.value,
+            isPlaying: isPlaying,
+            colors: colors,
+          ),
+          size: Size.infinite,
+        );
+    }
+  }
+}
+
+class _NebulaPlayButton extends StatefulWidget {
+  final bool isPlaying;
+  final VoidCallback onTap;
+  const _NebulaPlayButton({required this.isPlaying, required this.onTap});
+
+  @override
+  State<_NebulaPlayButton> createState() => _NebulaPlayButtonState();
+}
+
+class _NebulaPlayButtonState extends State<_NebulaPlayButton> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+       vsync: this,
+       duration: const Duration(milliseconds: 1500),
+    );
+    if (widget.isPlaying) _controller.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(_NebulaPlayButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isPlaying && !_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    } else if (!widget.isPlaying && _controller.isAnimating) {
+      _controller.stop();
+      _controller.animateTo(0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: widget.isPlaying ? [
+                BoxShadow(
+                  color: AppTheme.accent.withValues(alpha: 0.4 * _controller.value),
+                  blurRadius: 30 * _controller.value,
+                  spreadRadius: 10 * _controller.value,
+                ),
+              ] : [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20),
+              ],
+            ),
+            child: Icon(
+              widget.isPlaying ? Icons.pause_rounded : Icons.play_arrow_outlined,
+              color: Colors.black,
+              size: 48,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _NebulaBackgroundPainter extends CustomPainter {
+  final double animationValue;
+  final bool isPlaying;
+  final List<Color> colors;
+  _NebulaBackgroundPainter({
+    required this.animationValue, 
+    required this.isPlaying, 
+    required this.colors,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final speed = isPlaying ? 1.0 : 0.2;
+    final val = animationValue * 2 * math.pi;
+
+    void drawCloud(Color color, double xMult, double yMult, double radiusMult, double phase, BlendMode mode) {
+      final paint = Paint()
+        ..color = color
+        ..blendMode = mode
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 70);
+
+      final centerX = size.width / 2 + size.width * 0.35 * math.cos(val * speed + phase) * xMult;
+      final centerY = size.height / 2 + size.height * 0.35 * math.sin(val * speed + phase) * yMult;
+      
+      canvas.drawCircle(Offset(centerX, centerY), size.width * 0.4 * radiusMult, paint);
+    }
+
+    drawCloud(colors[0].withValues(alpha: 0.7), 1.0, 0.5, 1.2, 0, BlendMode.screen);
+    drawCloud(colors[1].withValues(alpha: 0.6), -1.2, 0.8, 1.0, 1.5, BlendMode.plus);
+    drawCloud(colors[2].withValues(alpha: 0.3), 0.8, -1.1, 0.8, 3.0, BlendMode.plus);
+    drawCloud(colors[3].withValues(alpha: 0.4), -0.5, -0.7, 1.3, 4.5, BlendMode.screen);
+
+    _drawStars(canvas, size, val);
+  }
+
+  @override
+  bool shouldRepaint(_NebulaBackgroundPainter oldDelegate) => true;
+}
+
+// ─── Aurora Painter ────────────────────────────────────────────────────────
+class _AuroraBackgroundPainter extends CustomPainter {
+  final double animationValue;
+  final bool isPlaying;
+  final List<Color> colors;
+
+  _AuroraBackgroundPainter({required this.animationValue, required this.isPlaying, required this.colors});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final speed = isPlaying ? 1.0 : 0.2;
+    final val = animationValue * 2 * math.pi;
+
+    for (int i = 0; i < 4; i++) {
+        final paint = Paint()
+            ..color = colors[i].withValues(alpha: 0.7) // Увеличили непрозрачность
+            ..strokeWidth = 140 // Сделали ленты шире
+            ..style = PaintingStyle.stroke
+            ..blendMode = BlendMode.screen // Добавили свечение
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 60); // Уменьшили размытие для четкости
+
+        final path = Path();
+        final xStart = (size.width / 4) * (i + 0.5); // Центрируем ленты
+        path.moveTo(xStart, -100);
+        
+        for (double y = 0; y < size.height + 200; y += 30) {
+            final xOffset = 80 * math.sin(y / size.height * math.pi + val * speed + i * 2);
+            path.lineTo(xStart + xOffset, y);
+        }
+        canvas.drawPath(path, paint);
+    }
+    _drawStars(canvas, size, val);
+  }
+
+  @override
+  bool shouldRepaint(_AuroraBackgroundPainter oldDelegate) => true;
+}
+
+// ─── Waves Painter ──────────────────────────────────────────────────────────
+class _WavesBackgroundPainter extends CustomPainter {
+    final double animationValue;
+    final bool isPlaying;
+    final List<Color> colors;
+
+    _WavesBackgroundPainter({required this.animationValue, required this.isPlaying, required this.colors});
+
+    @override
+    void paint(Canvas canvas, Size size) {
+        final speed = isPlaying ? 1.5 : 0.3;
+        final val = animationValue * 2 * math.pi;
+
+        for (int i = 0; i < 4; i++) {
+            final paint = Paint()
+                ..color = colors[i].withValues(alpha: 0.6) // Ярче
+                ..blendMode = BlendMode.plus // Слой на слой для яркости
+                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 40);
+
+            final path = Path();
+            final yBase = (size.height / 5) * (i + 1);
+            path.moveTo(-50, size.height + 50);
+            path.lineTo(-50, yBase);
+
+            for (double x = 0; x < size.width + 50; x += 20) {
+                final y = yBase + 40 * math.sin(x / size.width * 2 * math.pi + val * speed + i * 3);
+                path.lineTo(x, y);
+            }
+
+            path.lineTo(size.width + 50, size.height + 50);
+            path.close();
+            canvas.drawPath(path, paint);
+        }
+        _drawStars(canvas, size, val);
+    }
+
+    @override
+    bool shouldRepaint(_WavesBackgroundPainter oldDelegate) => true;
+}
+
+// ─── Vortex Painter ─────────────────────────────────────────────────────────
+class _VortexBackgroundPainter extends CustomPainter {
+    final double animationValue;
+    final bool isPlaying;
+    final List<Color> colors;
+
+    _VortexBackgroundPainter({required this.animationValue, required this.isPlaying, required this.colors});
+
+    @override
+    void paint(Canvas canvas, Size size) {
+        final speed = isPlaying ? 2.0 : 0.4;
+        final val = animationValue * 2 * math.pi;
+        final center = Offset(size.width / 2, size.height / 2);
+
+        for (int i = 0; i < 15; i++) {
+            final paint = Paint()
+                ..color = colors[i % 4].withValues(alpha: 0.7)
+                ..blendMode = BlendMode.plus
+                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 30);
+
+            final angle = val * speed + (i * math.pi / 7);
+            final radius = (size.height * 0.2) + (i * 12.0);
+            final x = center.dx + radius * math.cos(angle);
+            final y = center.dy + radius * math.sin(angle);
+            
+            canvas.drawCircle(Offset(x, y), 25 + i * 2.5, paint);
+        }
+        _drawStars(canvas, size, val);
+    }
+
+    @override
+    bool shouldRepaint(_VortexBackgroundPainter oldDelegate) => true;
+}
+
+// ─── Stardust Painter ───────────────────────────────────────────────────────
+class _StardustBackgroundPainter extends CustomPainter {
+    final double animationValue;
+    final bool isPlaying;
+    final List<Color> colors;
+
+    _StardustBackgroundPainter({required this.animationValue, required this.isPlaying, required this.colors});
+
+    @override
+    void paint(Canvas canvas, Size size) {
+        final speed = isPlaying ? 2.5 : 0.4;
+        final val = animationValue * 2 * math.pi;
+        final rand = math.Random(77);
+
+        // Рисуем "облака" пыли (крупные мягкие пятна)
+        for (int i = 0; i < 3; i++) {
+            final paint = Paint()
+                ..color = colors[i % 4].withValues(alpha: 0.2)
+                ..blendMode = BlendMode.screen
+                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 50);
+            
+            final x = (size.width * 0.3) + (size.width * 0.4 * math.sin(val * 0.5 + i));
+            final y = size.height * 0.5;
+            canvas.drawCircle(Offset(x, y), size.height * 0.6, paint);
+        }
+
+        // Рисуем тысячи мелких частиц
+        for (int i = 0; i < 80; i++) {
+            final basePosX = rand.nextDouble() * size.width;
+            final basePosY = rand.nextDouble() * size.height;
+            
+            // Движение по горизонтали + волновое смещение
+            final xShift = (animationValue * speed * 100 + i * 20) % (size.width + 100) - 50;
+            final yShift = 30 * math.sin(xShift / 50 + val + i);
+            
+            final opacity = (0.2 + 0.6 * math.sin(val * 2 + i)).clamp(0.0, 1.0);
+            final paint = Paint()
+                ..color = colors[i % 4].withValues(alpha: opacity)
+                ..blendMode = BlendMode.plus;
+
+            canvas.drawCircle(Offset((basePosX + xShift) % size.width, (basePosY + yShift) % size.height), 0.8 + rand.nextDouble() * 1.5, paint);
+        }
+        _drawStars(canvas, size, val);
+    }
+
+    @override
+    bool shouldRepaint(_StardustBackgroundPainter oldDelegate) => true;
+}
+
+
+void _drawStars(Canvas canvas, Size size, double val) {
+    final starPaint = Paint()..color = Colors.white;
+    final rand = math.Random(13);
+    for (int i = 0; i < 30; i++) {
+        final x = rand.nextDouble() * size.width;
+        final y = rand.nextDouble() * size.height;
+        final orbit = 4.0 * math.sin(val * 2 + i);
+        final opacity = 0.3 + 0.4 * math.sin(val * 4 + i);
+        
+        starPaint.color = Colors.white.withValues(alpha: opacity.clamp(0.0, 0.8));
+        canvas.drawCircle(Offset(x + orbit, y + orbit), 0.7 + rand.nextDouble() * 0.5, starPaint);
+    }
+}
+
+class _GrainPainter extends CustomPainter {
+  final double opacity;
+  _GrainPainter({required this.opacity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withValues(alpha: opacity);
+    final rand = math.Random(10);
+    for (int i = 0; i < 2000; i++) {
+      canvas.drawRect(
+        Rect.fromLTWH(rand.nextDouble() * size.width, rand.nextDouble() * size.height, 0.5, 0.5),
+        paint
+      );
+    }
+  }
+  @override
+  bool shouldRepaint(_GrainPainter oldDelegate) => false;
 }
 
 class _NewReleasesGrid extends StatelessWidget {
