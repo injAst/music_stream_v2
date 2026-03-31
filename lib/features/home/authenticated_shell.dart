@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/theme/app_theme.dart';
 import '../../providers/audio_player_controller.dart';
+import '../../providers/navigation_controller.dart';
 import '../player/mini_player.dart';
 
 class AuthenticatedShell extends StatefulWidget {
@@ -73,6 +76,9 @@ class _AuthenticatedShellState extends State<AuthenticatedShell> {
   @override
   Widget build(BuildContext context) {
     final audio = context.read<AudioPlayerController>();
+    final nav = context.watch<NavigationController>();
+    final router = GoRouter.of(context);
+    final isHomeTab = router.routerDelegate.currentConfiguration.last.matchedLocation == '/home';
 
     return KeyboardListener(
       focusNode: _shellFocusNode,
@@ -83,9 +89,37 @@ class _AuthenticatedShellState extends State<AuthenticatedShell> {
           children: [
             Expanded(child: widget.child),
             const MiniPlayer(),
+            if (isHomeTab) 
+              NavigationBar(
+                height: 64,
+                backgroundColor: AppTheme.surface,
+                indicatorColor: AppTheme.surfaceHighlight,
+                selectedIndex: nav.index,
+                onDestinationSelected: (i) => nav.setIndex(i),
+                destinations: [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined, color: _iconColor(nav.index, 0)),
+                    selectedIcon: const Icon(Icons.home_rounded, color: AppTheme.textPrimary),
+                    label: 'Главная',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.library_music_outlined, color: _iconColor(nav.index, 1)),
+                    selectedIcon: const Icon(Icons.library_music_rounded, color: AppTheme.textPrimary),
+                    label: 'Медиатека',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.person_outline_rounded, color: _iconColor(nav.index, 2)),
+                    selectedIcon: const Icon(Icons.person_rounded, color: AppTheme.textPrimary),
+                    label: 'Профиль',
+                  ),
+                ],
+              ),
           ],
         ),
       ),
     );
   }
+
+  Color _iconColor(int index, int i) =>
+      index == i ? AppTheme.textPrimary : AppTheme.textSecondary;
 }
