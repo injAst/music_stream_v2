@@ -12,9 +12,9 @@ class PlaylistRepository {
   PlaylistRepository({required this.token});
 
   Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      };
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $token',
+  };
 
   Future<List<Playlist>> getPlaylists() async {
     final response = await http.get(
@@ -30,7 +30,11 @@ class PlaylistRepository {
     throw Exception('Failed to load playlists: ${response.body}');
   }
 
-  Future<Playlist> createPlaylist(String name, {String? description, bool isPublic = false}) async {
+  Future<Playlist> createPlaylist(
+    String name, {
+    String? description,
+    bool isPublic = false,
+  }) async {
     final response = await http.post(
       Uri.parse('${ApiConfig.baseUrl}/playlists'),
       headers: _headers,
@@ -86,10 +90,10 @@ class PlaylistRepository {
       Uri.parse('${ApiConfig.baseUrl}/playlists/$id'),
       headers: _headers,
       body: jsonEncode({
-        if (name != null) 'name': name,
-        if (description != null) 'description': description,
-        if (isPublic != null) 'is_public': isPublic,
-        if (artworkUrl != null) 'artwork_url': artworkUrl,
+        'name': ?name,
+        'description': ?description,
+        'is_public': ?isPublic,
+        'artwork_url': ?artworkUrl,
       }),
     );
 
@@ -104,12 +108,14 @@ class PlaylistRepository {
     final uri = Uri.parse('${ApiConfig.baseUrl}/upload/artwork');
     final request = http.MultipartRequest('POST', uri)
       ..headers.addAll(_headers)
-      ..files.add(http.MultipartFile.fromBytes(
-        'file',
-        bytes,
-        filename: filename,
-        contentType: MediaType('image', 'jpeg'), // Обобщенно
-      ));
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+          contentType: MediaType('image', 'jpeg'), // Обобщенно
+        ),
+      );
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
@@ -133,7 +139,10 @@ class PlaylistRepository {
     }
   }
 
-  Future<void> removeTrackFromPlaylist(String playlistId, String trackId) async {
+  Future<void> removeTrackFromPlaylist(
+    String playlistId,
+    String trackId,
+  ) async {
     final response = await http.delete(
       Uri.parse('${ApiConfig.baseUrl}/playlists/$playlistId/tracks/$trackId'),
       headers: _headers,

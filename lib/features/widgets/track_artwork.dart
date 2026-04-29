@@ -30,18 +30,16 @@ class TrackArtwork extends StatelessWidget {
                 imageUrl: u,
                 fit: BoxFit.cover,
                 memCacheWidth: (size * 3).toInt(),
-                placeholder: (_, __) => Container(color: AppTheme.surfaceHighlight),
-                errorWidget: (_, __, ___) => _placeholder(),
+                placeholder: (_, _) =>
+                    Container(color: AppTheme.surfaceHighlight),
+                errorWidget: (_, _, _) => _placeholder(),
               )
             : _placeholder(),
       ),
     );
 
     if (heroTag != null) {
-      return Hero(
-        tag: heroTag!,
-        child: content,
-      );
+      return Hero(tag: heroTag!, child: content);
     }
     return content;
   }

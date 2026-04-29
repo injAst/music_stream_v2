@@ -26,40 +26,29 @@ GoRouter createAppRouter(AuthController auth) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/login',
-        builder: (_, __) => const LoginScreen(),
-      ),
-      GoRoute(
-        path: '/register',
-        builder: (_, __) => const RegisterScreen(),
-      ),
+      GoRoute(path: '/login', builder: (_, _) => const LoginScreen()),
+      GoRoute(path: '/register', builder: (_, _) => const RegisterScreen()),
       ShellRoute(
         builder: (context, state, child) => AuthenticatedShell(child: child),
         routes: [
-          GoRoute(
-            path: '/home',
-            builder: (_, __) => const HomeShell(),
-          ),
+          GoRoute(path: '/home', builder: (_, _) => const HomeShell()),
           GoRoute(
             path: '/add-track',
-            builder: (_, __) => const AddTrackScreen(),
+            builder: (_, _) => const AddTrackScreen(),
           ),
           GoRoute(
             path: '/edit-profile',
-            builder: (_, __) => const EditProfileScreen(),
+            builder: (_, _) => const EditProfileScreen(),
           ),
           GoRoute(
             path: '/profile/:id',
-            builder: (_, state) => UserProfileScreen(
-              userId: state.pathParameters['id']!,
-            ),
+            builder: (_, state) =>
+                UserProfileScreen(userId: state.pathParameters['id']!),
           ),
           GoRoute(
             path: '/playlist/:id',
-            builder: (_, state) => PlaylistDetailScreen(
-              playlistId: state.pathParameters['id']!,
-            ),
+            builder: (_, state) =>
+                PlaylistDetailScreen(playlistId: state.pathParameters['id']!),
           ),
         ],
       ),

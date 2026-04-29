@@ -41,7 +41,7 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
   final _globalArtworkUrl = TextEditingController();
   final _streamUrl = TextEditingController(); // For single URL fallback
   final _formKey = GlobalKey<FormState>();
-  
+
   bool _isProcessing = false;
   int _currentProcessingIndex = -1;
 
@@ -66,13 +66,15 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
           String name = file.name;
           int dot = name.lastIndexOf('.');
           String title = dot != -1 ? name.substring(0, dot) : name;
-          
-          _pendingTracks.add(PendingTrack(
-            file: file,
-            title: title,
-            artist: _globalArtist.text,
-            artworkUrl: _globalArtworkUrl.text,
-          ));
+
+          _pendingTracks.add(
+            PendingTrack(
+              file: file,
+              title: title,
+              artist: _globalArtist.text,
+              artworkUrl: _globalArtworkUrl.text,
+            ),
+          );
         }
       });
       _extractAllDurations();
@@ -82,14 +84,14 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
   Future<void> _extractAllDurations() async {
     for (int i = 0; i < _pendingTracks.length; i++) {
       if (_pendingTracks[i].duration != null) continue;
-      
+
       setState(() => _pendingTracks[i].status = 'extracting');
-      
+
       final player = AudioPlayer();
       try {
         final file = _pendingTracks[i].file;
         Duration? duration;
-        
+
         if (kIsWeb) {
           if (file.bytes != null) {
             final uri = Uri.dataFromBytes(file.bytes!, mimeType: 'audio/mpeg');
@@ -99,11 +101,9 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
           duration = await player.setFilePath(file.path!);
         }
 
-        if (duration == null) {
-          duration = await player.durationStream
-              .firstWhere((d) => d != null && d.inSeconds > 0)
-              .timeout(const Duration(seconds: 3), onTimeout: () => null);
-        }
+        duration ??= await player.durationStream
+            .firstWhere((d) => d != null && d.inSeconds > 0)
+            .timeout(const Duration(seconds: 3), onTimeout: () => null);
 
         if (mounted) {
           setState(() {
@@ -125,62 +125,67 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
     setState(() => _isProcessing = true);
 
     try {
-       // Batch upload pending tracks
-       for (int i = 0; i < _pendingTracks.length; i++) {
-         if (_pendingTracks[i].status == 'done') continue;
+      // Batch upload pending tracks
+      for (int i = 0; i < _pendingTracks.length; i++) {
+        if (_pendingTracks[i].status == 'done') continue;
 
-         setState(() {
-           _currentProcessingIndex = i;
-           _pendingTracks[i].status = 'uploading';
-         });
+        setState(() {
+          _currentProcessingIndex = i;
+          _pendingTracks[i].status = 'uploading';
+        });
 
-         final track = _pendingTracks[i];
-         File? fileObj;
-         if (!kIsWeb && track.file.path != null) {
-           fileObj = File(track.file.path!);
-         }
+        final track = _pendingTracks[i];
+        File? fileObj;
+        if (!kIsWeb && track.file.path != null) {
+          fileObj = File(track.file.path!);
+        }
 
-         try {
-           await context.read<LibraryController>().addTrack(
-             title: track.title.trim(),
-             artist: (track.artist.isEmpty ? _globalArtist.text : track.artist).trim(),
-             artworkUrl: (track.artworkUrl.isEmpty ? _globalArtworkUrl.text : track.artworkUrl).trim(),
-             audioFile: fileObj,
-             audioBytes: track.file.bytes,
-             audioFileName: track.file.name,
-             durationSeconds: track.duration,
-           );
-           if (mounted) {
-             setState(() => _pendingTracks[i].status = 'done');
-           }
-         } catch (e) {
-           if (mounted) {
-             setState(() {
-               _pendingTracks[i].status = 'error';
-               _pendingTracks[i].error = e.toString();
-             });
-           }
-           // Stop on first error to let user fix? Or continue?
-           // Let's continue but mark error.
-         }
-       }
+        try {
+          await context.read<LibraryController>().addTrack(
+            title: track.title.trim(),
+            artist: (track.artist.isEmpty ? _globalArtist.text : track.artist)
+                .trim(),
+            artworkUrl:
+                (track.artworkUrl.isEmpty
+                        ? _globalArtworkUrl.text
+                        : track.artworkUrl)
+                    .trim(),
+            audioFile: fileObj,
+            audioBytes: track.file.bytes,
+            audioFileName: track.file.name,
+            durationSeconds: track.duration,
+          );
+          if (mounted) {
+            setState(() => _pendingTracks[i].status = 'done');
+          }
+        } catch (e) {
+          if (mounted) {
+            setState(() {
+              _pendingTracks[i].status = 'error';
+              _pendingTracks[i].error = e.toString();
+            });
+          }
+          // Stop on first error to let user fix? Or continue?
+          // Let's continue but mark error.
+        }
+      }
 
-       // Single URL fallback if provided and no tracks selected
-       if (_pendingTracks.isEmpty && _streamUrl.text.isNotEmpty) {
-         await context.read<LibraryController>().addTrack(
-           title: 'Stream',
-           artist: _globalArtist.text.trim(),
-           artworkUrl: _globalArtworkUrl.text.trim(),
-           streamUrl: _streamUrl.text.trim(),
-         );
-       }
+      // Single URL fallback if provided and no tracks selected
+      if (_pendingTracks.isEmpty && _streamUrl.text.isNotEmpty) {
+        await context.read<LibraryController>().addTrack(
+          title: 'Stream',
+          artist: _globalArtist.text.trim(),
+          artworkUrl: _globalArtworkUrl.text.trim(),
+          streamUrl: _streamUrl.text.trim(),
+        );
+      }
 
-       if (mounted && _pendingTracks.every((t) => t.status == 'done')) {
-         ScaffoldMessenger.of(context).showSnackBar(
-           const SnackBar(content: Text('Все треки успешно загружены!')),
-         );
-         context.pop();
-       }
+      if (mounted && _pendingTracks.every((t) => t.status == 'done')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Все треки успешно загружены!')),
+        );
+        context.pop();
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -195,12 +200,19 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_pendingTracks.isEmpty ? 'Загрузить треки' : 'Загрузка (${_pendingTracks.length})'),
+        title: Text(
+          _pendingTracks.isEmpty
+              ? 'Загрузить треки'
+              : 'Загрузка (${_pendingTracks.length})',
+        ),
         actions: [
           if (_pendingTracks.isNotEmpty && !_isProcessing)
             TextButton(
               onPressed: () => setState(() => _pendingTracks.clear()),
-              child: const Text('ОЧИСТИТЬ', style: TextStyle(color: Colors.redAccent)),
+              child: const Text(
+                'ОЧИСТИТЬ',
+                style: TextStyle(color: Colors.redAccent),
+              ),
             ),
         ],
       ),
@@ -219,7 +231,10 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
                       const SizedBox(height: 24),
                       _buildGlobalInputs(),
                       const SizedBox(height: 24),
-                      if (_pendingTracks.isEmpty) _buildFileUploadTrigger() else _buildTrackList(),
+                      if (_pendingTracks.isEmpty)
+                        _buildFileUploadTrigger()
+                      else
+                        _buildTrackList(),
                     ],
                   ),
                 ),
@@ -238,7 +253,11 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
       children: [
         Text(
           'Загрузка паком',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
         ),
         SizedBox(height: 8),
         Text(
@@ -292,7 +311,11 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
         decoration: BoxDecoration(
           color: AppTheme.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.surfaceHighlight, width: 2, style: BorderStyle.solid),
+          border: Border.all(
+            color: AppTheme.surfaceHighlight,
+            width: 2,
+            style: BorderStyle.solid,
+          ),
         ),
         child: const Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -301,7 +324,10 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
             SizedBox(height: 12),
             Text(
               'Нажмите, чтобы выбрать файлы',
-              style: TextStyle(color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -316,7 +342,10 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Выбранные файлы', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const Text(
+              'Выбранные файлы',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
             TextButton.icon(
               onPressed: _isProcessing ? null : _pickFiles,
               icon: const Icon(Icons.add, size: 18),
@@ -329,7 +358,7 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: _pendingTracks.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final track = _pendingTracks[index];
             return _buildTrackItem(track, index);
@@ -341,7 +370,7 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
 
   Widget _buildTrackItem(PendingTrack track, int index) {
     bool isProcessingThis = _currentProcessingIndex == index;
-    
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -366,7 +395,10 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
                     TextFormField(
                       initialValue: track.title,
                       enabled: !_isProcessing,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                       decoration: const InputDecoration(
                         isDense: true,
                         hintText: 'Название',
@@ -379,7 +411,10 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
                     TextFormField(
                       initialValue: track.artist,
                       enabled: !_isProcessing,
-                      style: const TextStyle(fontSize: 12, color: AppTheme.accent),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.accent,
+                      ),
                       decoration: const InputDecoration(
                         isDense: true,
                         hintText: 'Исполнитель (если отличается)',
@@ -392,7 +427,10 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
                     TextFormField(
                       initialValue: track.artworkUrl,
                       enabled: !_isProcessing,
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textSecondary,
+                      ),
                       decoration: const InputDecoration(
                         isDense: true,
                         hintText: 'URL обложки (если отличается)',
@@ -404,23 +442,34 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
                     const SizedBox(height: 4),
                     Text(
                       '${(track.file.size / 1024 / 1024).toStringAsFixed(2)} MB • ${_formatSec(track.duration ?? 0)}',
-                      style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ),
               if (!_isProcessing)
                 IconButton(
-                  icon: const Icon(Icons.close, size: 18, color: Colors.redAccent),
-                  onPressed: () => setState(() => _pendingTracks.removeAt(index)),
+                  icon: const Icon(
+                    Icons.close,
+                    size: 18,
+                    color: Colors.redAccent,
+                  ),
+                  onPressed: () =>
+                      setState(() => _pendingTracks.removeAt(index)),
                 ),
             ],
           ),
           if (track.status == 'error' && track.error != null)
-             Padding(
-               padding: const EdgeInsets.only(top: 8),
-               child: Text(track.error!, style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
-             ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                track.error!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+              ),
+            ),
         ],
       ),
     );
@@ -431,26 +480,49 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
       case 'extracting':
       case 'uploading':
         return const SizedBox(
-          width: 20, height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(AppTheme.accent)),
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation(AppTheme.accent),
+          ),
         );
       case 'done':
-        return const Icon(Icons.check_circle_rounded, color: Colors.greenAccent, size: 22);
+        return const Icon(
+          Icons.check_circle_rounded,
+          color: Colors.greenAccent,
+          size: 22,
+        );
       case 'error':
-        return const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 22);
+        return const Icon(
+          Icons.error_outline_rounded,
+          color: Colors.redAccent,
+          size: 22,
+        );
       default:
-        return const Icon(Icons.audio_file_rounded, color: AppTheme.textSecondary, size: 22);
+        return const Icon(
+          Icons.audio_file_rounded,
+          color: AppTheme.textSecondary,
+          size: 22,
+        );
     }
   }
 
   Widget _buildBottomAction() {
-    if (_pendingTracks.isEmpty && _streamUrl.text.isEmpty) return const SizedBox.shrink();
-    
+    if (_pendingTracks.isEmpty && _streamUrl.text.isEmpty)
+      return const SizedBox.shrink();
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, -5))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, -5),
+          ),
+        ],
       ),
       child: ElevatedButton(
         onPressed: _isProcessing ? null : _startUpload,
@@ -458,9 +530,15 @@ class _AddTrackScreenState extends State<AddTrackScreen> {
           padding: const EdgeInsets.symmetric(vertical: 16),
           minimumSize: const Size(double.infinity, 54),
         ),
-        child: _isProcessing 
-          ? Text('ЗАГРУЗКА... (${_currentProcessingIndex + 1}/${_pendingTracks.length})')
-          : Text(_pendingTracks.isEmpty ? 'ДОБАВИТЬ СТРИМ' : 'ЗАГРУЗИТЬ ВСЁ (${_pendingTracks.length})'),
+        child: _isProcessing
+            ? Text(
+                'ЗАГРУЗКА... (${_currentProcessingIndex + 1}/${_pendingTracks.length})',
+              )
+            : Text(
+                _pendingTracks.isEmpty
+                    ? 'ДОБАВИТЬ СТРИМ'
+                    : 'ЗАГРУЗИТЬ ВСЁ (${_pendingTracks.length})',
+              ),
       ),
     );
   }

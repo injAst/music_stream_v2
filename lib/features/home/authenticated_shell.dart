@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -37,13 +36,13 @@ class _AuthenticatedShellState extends State<AuthenticatedShell> {
 
   void _handleKeyEvent(KeyEvent event, AudioPlayerController audio) {
     if (event is! KeyDownEvent) return;
-    
+
     final primaryFocus = FocusManager.instance.primaryFocus;
     bool isTyping = false;
     if (primaryFocus != null) {
       final context = primaryFocus.context;
       if (context != null) {
-        if (context.widget is EditableText || 
+        if (context.widget is EditableText ||
             context.findAncestorWidgetOfExactType<EditableText>() != null) {
           isTyping = true;
         }
@@ -53,7 +52,7 @@ class _AuthenticatedShellState extends State<AuthenticatedShell> {
         isTyping = true;
       }
     }
-         
+
     if (isTyping) return;
 
     final key = event.logicalKey;
@@ -79,7 +78,9 @@ class _AuthenticatedShellState extends State<AuthenticatedShell> {
     final audio = context.read<AudioPlayerController>();
     final nav = context.watch<NavigationController>();
     final router = GoRouter.of(context);
-    final isHomeTab = router.routerDelegate.currentConfiguration.last.matchedLocation == '/home';
+    final isHomeTab =
+        router.routerDelegate.currentConfiguration.last.matchedLocation ==
+        '/home';
 
     return KeyboardListener(
       focusNode: _shellFocusNode,
@@ -90,7 +91,7 @@ class _AuthenticatedShellState extends State<AuthenticatedShell> {
           children: [
             // Основной контент (занимает всё пространство)
             Positioned.fill(child: widget.child),
-            
+
             // Плавающая панель управления снизу
             Positioned(
               left: 0,
@@ -115,17 +116,21 @@ class _AuthenticatedShellState extends State<AuthenticatedShell> {
                         data: Theme.of(context).copyWith(
                           navigationBarTheme: NavigationBarThemeData(
                             backgroundColor: Colors.transparent,
-                            indicatorColor: AppTheme.accent.withValues(alpha: 0.1),
-                            labelTextStyle: WidgetStateProperty.resolveWith((states) {
+                            indicatorColor: AppTheme.accent.withValues(
+                              alpha: 0.1,
+                            ),
+                            labelTextStyle: WidgetStateProperty.resolveWith((
+                              states,
+                            ) {
                               if (states.contains(WidgetState.selected)) {
                                 return const TextStyle(
-                                  color: AppTheme.accent, 
-                                  fontWeight: FontWeight.bold, 
+                                  color: AppTheme.accent,
+                                  fontWeight: FontWeight.bold,
                                   fontSize: 12,
                                 );
                               }
                               return const TextStyle(
-                                color: AppTheme.textSecondary, 
+                                color: AppTheme.textSecondary,
                                 fontSize: 12,
                               );
                             }),
@@ -139,18 +144,36 @@ class _AuthenticatedShellState extends State<AuthenticatedShell> {
                           onDestinationSelected: (i) => nav.setIndex(i),
                           destinations: [
                             NavigationDestination(
-                              icon: Icon(Icons.home_outlined, color: _iconColor(nav.index, 0)),
-                              selectedIcon: const Icon(Icons.home_rounded, color: AppTheme.accent),
+                              icon: Icon(
+                                Icons.home_outlined,
+                                color: _iconColor(nav.index, 0),
+                              ),
+                              selectedIcon: const Icon(
+                                Icons.home_rounded,
+                                color: AppTheme.accent,
+                              ),
                               label: 'Главная',
                             ),
                             NavigationDestination(
-                              icon: Icon(Icons.library_music_outlined, color: _iconColor(nav.index, 1)),
-                              selectedIcon: const Icon(Icons.library_music_rounded, color: AppTheme.accent),
+                              icon: Icon(
+                                Icons.library_music_outlined,
+                                color: _iconColor(nav.index, 1),
+                              ),
+                              selectedIcon: const Icon(
+                                Icons.library_music_rounded,
+                                color: AppTheme.accent,
+                              ),
                               label: 'Медиатека',
                             ),
                             NavigationDestination(
-                              icon: Icon(Icons.person_outline_rounded, color: _iconColor(nav.index, 2)),
-                              selectedIcon: const Icon(Icons.person_rounded, color: AppTheme.accent),
+                              icon: Icon(
+                                Icons.person_outline_rounded,
+                                color: _iconColor(nav.index, 2),
+                              ),
+                              selectedIcon: const Icon(
+                                Icons.person_rounded,
+                                color: AppTheme.accent,
+                              ),
                               label: 'Профиль',
                             ),
                           ],
