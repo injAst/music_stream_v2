@@ -44,6 +44,9 @@ class AudioPlayerController extends ChangeNotifier {
   LibraryController? _library;
   AuthRepository? _authRepo;
   DateTime? _lastPlayedAt;
+  String? _audioError;
+
+  String? get audioError => _audioError;
 
   void setLibrary(LibraryController lib) {
     _library = lib;
@@ -64,7 +67,12 @@ class AudioPlayerController extends ChangeNotifier {
       
       // Настраиваем плеер без авто-запуска
       final resolved = ApiConfig.resolveUrl(track.streamUrl) ?? track.streamUrl;
-      _player.setAudioSource(AudioSource.uri(Uri.parse(resolved)), preload: true);
+      _player
+          .setAudioSource(AudioSource.uri(Uri.parse(resolved)), preload: false)
+          .catchError((e) {
+        debugPrint('setInitialTrack error: $e');
+        return null;
+      });
       
       notifyListeners();
     }
@@ -128,18 +136,22 @@ class AudioPlayerController extends ChangeNotifier {
     _authRepo?.updateLastTrack(track.id);
 
     try {
+      _audioError = null;
       _playlistSource = ConcatenatingAudioSource(
         children: _currentPlaylist.map((t) {
-          final resolved = ApiConfig.resolveUrl(t.streamUrl) ?? t.streamUrl;
-          return AudioSource.uri(Uri.parse(resolved));
+          // Аудио URL НЕ проксируем: наш S3 поддерживает CORS и Range-запросы.
+          // ApiConfig.resolveUrl перенаправлял через /proxy/image — это для картинок, не аудио.
+          final url = t.streamUrl.isNotEmpty ? t.streamUrl : '';
+          return AudioSource.uri(Uri.parse(url));
         }).toList(),
       );
       
       await _player.setAudioSource(_playlistSource!, initialIndex: _currentIndex);
       await _player.play();
     } catch (e) {
+      _audioError = 'Не удалось воспроизвести трек';
       debugPrint('playTrack error: $e');
-      rethrow;
+      notifyListeners();
     }
   }
 

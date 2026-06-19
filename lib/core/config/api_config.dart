@@ -2,7 +2,15 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiConfig {
+  /// Задаётся при сборке командой:
+  /// flutter build web --dart-define=API_URL=https://your-api.fly.dev/v1
+  static const _prodApiUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'https://d5dd2ipjnesrn8mjreq9.tmjd4m4j.apigw.yandexcloud.net/v1',
+  );
+
   static String get baseUrl {
+    if (_prodApiUrl.isNotEmpty) return _prodApiUrl;
     try {
       if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8081/v1';
     } catch (_) {}

@@ -24,7 +24,7 @@ Future<void> main() async {
   auth.setLibrary(lib);
   auth.setAudioPlayer(audioPlayer);
   audioPlayer.setAuthRepo(authRepo);
-  
+
   final router = createAppRouter(auth);
 
   runApp(
@@ -37,13 +37,13 @@ Future<void> main() async {
         ChangeNotifierProvider<AudioPlayerController>.value(value: audioPlayer),
         ChangeNotifierProxyProvider<LibraryController, AudioPlayerController>(
           create: (_) => audioPlayer,
-          update: (_, library, player) => (player ?? audioPlayer)..setLibrary(library),
+          update: (_, library, player) =>
+              (player ?? audioPlayer)..setLibrary(library),
         ),
-        ChangeNotifierProvider(
-          create: (_) => NavigationController(),
-        ),
+        ChangeNotifierProvider(create: (_) => NavigationController()),
         ChangeNotifierProxyProvider<AuthController, PlaylistController>(
-          create: (context) => PlaylistController(auth: context.read<AuthController>()),
+          create: (context) =>
+              PlaylistController(auth: context.read<AuthController>()),
           update: (context, auth, previous) => PlaylistController(auth: auth),
         ),
       ],

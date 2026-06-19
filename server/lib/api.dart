@@ -1,18 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:args/args.dart';
 import 'package:bcrypt/bcrypt.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
 import 'package:dotenv/dotenv.dart';
+import 'package:mime/mime.dart';
 import 'package:postgres/postgres.dart';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
-import 'package:shelf_cors_headers/shelf_cors_headers.dart';
+
 import 'package:shelf_multipart/shelf_multipart.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_static/shelf_static.dart';
 import 'package:http/http.dart' as http;
+import 'r2_client.dart';
 
 Future<void> runServer(List<String> args) async {
   final dotEnv = DotEnv(includePlatformEnvironment: true)..load();
@@ -49,19 +52,74 @@ Future<void> runServer(List<String> args) async {
   final sslModeParam = u.queryParameters['sslmode'];
   final sslMode = sslModeParam == 'disable' ? SslMode.disable : SslMode.require;
 
+  // --- S3-совместимое хранилище (Yandex Cloud, VK Cloud, Cloudflare R2 и др.) ---
+  //
+  // Используйте S3_* переменные для любого S3-провайдера:
+  //   Yandex Cloud:  S3_ENDPOINT=storage.yandexcloud.net  S3_REGION=ru-central1
+  //   Cloudflare R2: S3_ENDPOINT={account_id}.r2.cloudflarestorage.com  S3_REGION=auto
+  //   VK Cloud:      S3_ENDPOINT=hb.ru-msk.vkcloud-storage.ru  S3_REGION=ru-msk
+  //   Selectel:      S3_ENDPOINT=s3.ru-1.storage.selcloud.ru  S3_REGION=ru-1
+  //
+  // Для Cloudflare R2 также поддерживается старый формат R2_ACCOUNT_ID.
+
+  final r2AccountId = dotEnv['R2_ACCOUNT_ID'] ?? '';
+  final s3Endpoint = dotEnv['S3_ENDPOINT'] ??
+      (r2AccountId.isNotEmpty ? '$r2AccountId.r2.cloudflarestorage.com' : '');
+  final s3Region = dotEnv['S3_REGION'] ??
+      (r2AccountId.isNotEmpty ? 'auto' : 'auto');
+  final s3AccessKey =
+      dotEnv['S3_ACCESS_KEY_ID'] ?? dotEnv['R2_ACCESS_KEY_ID'] ?? '';
+  final s3SecretKey =
+      dotEnv['S3_SECRET_ACCESS_KEY'] ?? dotEnv['R2_SECRET_ACCESS_KEY'] ?? '';
+  final s3Bucket = dotEnv['S3_BUCKET'] ?? dotEnv['R2_BUCKET'] ?? 'pulse-music';
+  final s3PublicUrl = dotEnv['S3_PUBLIC_URL'] ?? dotEnv['R2_PUBLIC_URL'] ?? '';
+
+  R2Client? r2Client;
+  if (s3Endpoint.isNotEmpty &&
+      s3AccessKey.isNotEmpty &&
+      s3SecretKey.isNotEmpty) {
+    r2Client = R2Client(
+      endpoint: s3Endpoint,
+      region: s3Region,
+      accessKeyId: s3AccessKey,
+      secretAccessKey: s3SecretKey,
+      bucket: s3Bucket,
+      publicUrl: s3PublicUrl,
+    );
+  }
+
+  // Гарантируем наличие локальных папок (нужно shelf_static и fallback)
+  await Directory('uploads/audio').create(recursive: true);
+  await Directory('uploads/artworks').create(recursive: true);
+
   final pool = Pool<void>.withEndpoints([
     endpoint,
   ], settings: PoolSettings(maxConnectionCount: 20, sslMode: sslMode));
-  final app = _buildApp(conn: pool, jwtSecret: jwtSecret);
-  final handler = Pipeline().addMiddleware(corsHeaders()).addHandler(app);
+  final app = _buildApp(
+    conn: pool,
+    jwtSecret: jwtSecret,
+    r2: r2Client,
+    r2PublicUrl: s3PublicUrl,
+  );
+  final handler = Pipeline().addMiddleware(_corsMiddleware()).addHandler(app);
 
   final server = await shelf_io.serve(handler, InternetAddress.anyIPv4, port);
   stdout.writeln(
     'FlowMusic API → http://${server.address.host}:${server.port}',
   );
+  if (r2Client != null) {
+    stdout.writeln('Storage → bucket=$s3Bucket  public=$s3PublicUrl');
+  } else {
+    stdout.writeln('Storage → не настроен, используется локальная папка uploads/');
+  }
 }
 
-Handler _buildApp({required Session conn, required String jwtSecret}) {
+Handler _buildApp({
+  required Session conn,
+  required String jwtSecret,
+  R2Client? r2,
+  String r2PublicUrl = '',
+}) {
   final router = Router();
 
   Response jsonRes(Object? body, {int status = 200}) => Response(
@@ -74,6 +132,40 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
     // Убираем всё, кроме латиницы, цифр, точек и подчёркиваний
     final name = fileName.replaceAll(RegExp(r'\s+'), '_');
     return name.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '');
+  }
+
+  /// Загружает файл в R2 (если настроен) или в локальную папку uploads/.
+  /// Возвращает публичный URL файла.
+  Future<String> uploadToStorage({
+    required Stream<List<int>> dataStream,
+    required String objectPath,
+    required String contentType,
+    required Request req,
+  }) async {
+    // Читаем все байты из multipart-стрима
+    final byteList = <int>[];
+    await for (final chunk in dataStream) {
+      byteList.addAll(chunk);
+    }
+    final bytes = Uint8List.fromList(byteList);
+
+    if (r2 != null && r2PublicUrl.isNotEmpty) {
+      // Загружаем в Cloudflare R2
+      return await r2.putObject(objectPath, bytes, contentType: contentType);
+    } else {
+      // Локальный fallback (для разработки)
+      final localPath = 'uploads/$objectPath';
+      final dir = Directory(
+        localPath.substring(0, localPath.lastIndexOf('/')),
+      );
+      if (!await dir.exists()) await dir.create(recursive: true);
+      await File(localPath).writeAsBytes(bytes);
+
+      final scheme = req.requestedUri.scheme;
+      final host = req.requestedUri.host;
+      final port = req.requestedUri.port;
+      return '$scheme://$host:$port/uploads/$objectPath';
+    }
   }
 
   String? bearer(Request req) {
@@ -130,6 +222,44 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
       .addHandler(staticHandler);
   router.mount('/uploads/', cachedStaticHandler);
 
+  // Генерирует presigned URL для прямой загрузки в S3 из браузера (минуя Gateway)
+  router.get('/v1/upload/presign', (Request req) async {
+    final uid = userIdFromToken(req);
+    if (uid == null) return jsonRes({'error': 'Нужна авторизация'}, status: 401);
+    if (r2 == null) return jsonRes({'error': 'S3 не настроен'}, status: 503);
+
+    final filename = req.url.queryParameters['filename'] ?? 'upload';
+    final type = req.url.queryParameters['type'] ?? 'audio';
+
+    final sanitized = sanitizeFileName(filename);
+    final prefix = uid.substring(0, 8);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final newName = '${prefix}_${timestamp}_$sanitized';
+    final folder = type == 'artwork' ? 'artworks' : 'audio';
+    final objectPath = '$folder/$newName';
+
+    // Определяем content-type по расширению файла
+    final ext = sanitized.toLowerCase().split('.').last;
+    final contentType = _mimeForExt(ext, type);
+
+    // Presigned URL с подписанным Content-Type
+    final presignedUrl = r2!.generatePresignedPutUrl(
+      objectPath,
+      expiresInSeconds: 3600,
+      contentType: contentType,
+    );
+    final baseUrl = r2PublicUrl.startsWith('https://')
+        ? r2PublicUrl
+        : 'https://$r2PublicUrl';
+    final publicUrl = '$baseUrl/$objectPath';
+
+    return jsonRes({
+      'presigned_url': presignedUrl,
+      'public_url': publicUrl,
+      'content_type': contentType,
+    });
+  });
+
   router.post('/v1/upload', (Request req) async {
     final uid = userIdFromToken(req);
     if (uid == null)
@@ -146,23 +276,18 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
         if (data.name == 'file') {
           final filename = data.filename ?? 'upload.mp3';
           final sanitized = sanitizeFileName(filename);
-          // Формат: [краткий UID]_[метка времени]_[имя_файла]
           final prefix = uid.substring(0, 8);
           final timestamp = DateTime.now().millisecondsSinceEpoch;
           final newName = '${prefix}_${timestamp}_$sanitized';
+          final contentType =
+              lookupMimeType(filename) ?? 'audio/mpeg';
 
-          final dir = Directory('uploads/audio');
-          if (!await dir.exists()) await dir.create(recursive: true);
-
-          final file = File('uploads/audio/$newName');
-          final sink = file.openWrite();
-          await sink.addStream(data.part);
-          await sink.close();
-
-          final scheme = req.requestedUri.scheme;
-          final host = req.requestedUri.host;
-          final port = req.requestedUri.port;
-          fileUrl = '$scheme://$host:$port/uploads/audio/$newName';
+          fileUrl = await uploadToStorage(
+            dataStream: data.part,
+            objectPath: 'audio/$newName',
+            contentType: contentType,
+            req: req,
+          );
         }
       }
 
@@ -195,19 +320,15 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
           final prefix = uid.substring(0, 8);
           final timestamp = DateTime.now().millisecondsSinceEpoch;
           final newName = '${prefix}_${timestamp}_$sanitized';
+          final contentType =
+              lookupMimeType(filename) ?? 'image/jpeg';
 
-          final dir = Directory('uploads/artworks');
-          if (!await dir.exists()) await dir.create(recursive: true);
-
-          final file = File('uploads/artworks/$newName');
-          final sink = file.openWrite();
-          await sink.addStream(data.part);
-          await sink.close();
-
-          final scheme = req.requestedUri.scheme;
-          final host = req.requestedUri.host;
-          final port = req.requestedUri.port;
-          fileUrl = '$scheme://$host:$port/uploads/artworks/$newName';
+          fileUrl = await uploadToStorage(
+            dataStream: data.part,
+            objectPath: 'artworks/$newName',
+            contentType: contentType,
+            req: req,
+          );
         }
       }
 
@@ -1139,4 +1260,48 @@ Handler _buildApp({required Session conn, required String jwtSecret}) {
   });
 
   return router.call;
+}
+
+/// Кастомный CORS-middleware без Access-Control-Allow-Credentials.
+/// Без него браузер отправляет куки Yandex Cloud → инфраструктура YC
+/// проверяет права аутентифицированного пользователя → 403.
+/// С Access-Control-Allow-Origin: * запросы идут анонимно → allUsers → 200.
+Middleware _corsMiddleware() {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'DELETE,GET,OPTIONS,PATCH,POST,PUT',
+    'Access-Control-Allow-Headers':
+        'accept,accept-encoding,authorization,content-type,dnt,origin,user-agent,x-requested-with',
+    'Access-Control-Max-Age': '86400',
+  };
+
+  return (Handler handler) {
+    return (Request request) async {
+      if (request.method == 'OPTIONS') {
+        return Response.ok('', headers: corsHeaders);
+      }
+      final response = await handler(request);
+      return response.change(headers: {...response.headers, ...corsHeaders});
+    };
+  };
+}
+
+String _mimeForExt(String ext, String type) {
+  const audioMap = {
+    'mp3': 'audio/mpeg',
+    'wav': 'audio/wav',
+    'm4a': 'audio/mp4',
+    'ogg': 'audio/ogg',
+    'flac': 'audio/flac',
+    'aac': 'audio/aac',
+  };
+  const imageMap = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'webp': 'image/webp',
+    'gif': 'image/gif',
+  };
+  if (type == 'artwork') return imageMap[ext] ?? 'image/jpeg';
+  return audioMap[ext] ?? 'audio/mpeg';
 }

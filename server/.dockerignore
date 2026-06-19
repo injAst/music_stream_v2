@@ -1,0 +1,7 @@
+# Исключаем кэш Dart с Windows-путями — они сломают сборку в Linux-контейнере
+.dart_tool/
+build/
+uploads/
+.env
+.env.*
+*.log

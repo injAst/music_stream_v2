@@ -96,26 +96,47 @@ class TrackRepository {
     required String filename,
     required String endpoint,
   }) async {
-    final request = http.MultipartRequest('POST', Uri.parse('${ApiConfig.baseUrl}$endpoint'))
-      ..headers.addAll(_headers());
-      
-    if (kIsWeb && bytes != null) {
-      request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
-    } else if (!kIsWeb && file != null) {
-      request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: filename));
-    } else if (bytes != null) {
-      request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: filename));
+    // Шаг 1: Получаем presigned URL от сервера
+    final type = endpoint.contains('artwork') ? 'artwork' : 'audio';
+    final presignRes = await http.get(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/upload/presign'
+        '?filename=${Uri.encodeComponent(filename)}&type=$type',
+      ),
+      headers: _headers(),
+    );
+    _handleError(presignRes);
+    final presignData = jsonDecode(presignRes.body) as Map<String, dynamic>;
+    final presignedUrl  = presignData['presigned_url'] as String;
+    final publicUrl     = presignData['public_url']    as String;
+    // Используем content-type от сервера — он должен совпадать с подписанным!
+    final contentType   = presignData['content_type']  as String? ?? 'application/octet-stream';
+
+    // Шаг 2: Читаем байты файла
+    final List<int> fileBytes;
+    if (bytes != null) {
+      fileBytes = bytes;
+    } else if (file != null) {
+      fileBytes = await file.readAsBytes();
     } else {
       throw Exception('Необходим либо файл, либо набор байтов для загрузки');
     }
 
-    final streamedResponse = await request.send();
-    final res = await http.Response.fromStream(streamedResponse);
-    _handleError(res);
+    // Шаг 3: Загружаем напрямую в S3 через presigned URL (минуя Gateway)
+    // ВАЖНО: Content-Type подписан в URL. Не добавляем x-amz-content-sha256 — вызывает 403.
+    final s3Response = await http.put(
+      Uri.parse(presignedUrl),
+      headers: {'Content-Type': contentType},
+      body: fileBytes,
+    );
 
-    final data = jsonDecode(res.body);
-    return data['url'] as String;
+    if (s3Response.statusCode != 200) {
+      throw Exception('Ошибка загрузки в S3: ${s3Response.statusCode} ${s3Response.body}');
+    }
+
+    return publicUrl;
   }
+
 
   Future<void> removeTrack(String id) async {
     final res = await http.delete(

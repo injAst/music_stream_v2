@@ -336,14 +336,29 @@ class _FullPlayerBodyState extends State<_FullPlayerBody> {
   }
 }
 
-class _PlayerControls extends StatelessWidget {
+class _PlayerControls extends StatefulWidget {
   const _PlayerControls();
+
+  @override
+  State<_PlayerControls> createState() => _PlayerControlsState();
+}
+
+class _PlayerControlsState extends State<_PlayerControls> {
+  bool _isDragging = false;
+  double _dragValue = 0;
 
   @override
   Widget build(BuildContext context) {
     final audio = context.watch<AudioPlayerController>();
     final duration = audio.duration ?? Duration.zero;
     final position = audio.position;
+
+    final sliderMax =
+        duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1.0;
+    final streamValue = duration.inMilliseconds > 0
+        ? position.inMilliseconds.clamp(0, duration.inMilliseconds).toDouble()
+        : 0.0;
+    final sliderValue = _isDragging ? _dragValue : streamValue;
 
     return Column(
       children: [
@@ -357,12 +372,16 @@ class _PlayerControls extends StatelessWidget {
             thumbColor: AppTheme.textPrimary,
           ),
           child: Slider(
-            value: duration.inMilliseconds > 0
-                ? position.inMilliseconds.clamp(0, duration.inMilliseconds).toDouble()
-                : 0,
-            max: duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1,
-            onChanged: (v) {
+            value: sliderValue.clamp(0, sliderMax),
+            max: sliderMax,
+            onChangeStart: (v) => setState(() {
+              _isDragging = true;
+              _dragValue = v;
+            }),
+            onChanged: (v) => setState(() => _dragValue = v),
+            onChangeEnd: (v) {
               audio.seek(Duration(milliseconds: v.round()));
+              setState(() => _isDragging = false);
             },
           ),
         ),
@@ -370,7 +389,9 @@ class _PlayerControls extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              formatPlayerDuration(position),
+              formatPlayerDuration(
+                _isDragging ? Duration(milliseconds: _dragValue.round()) : position,
+              ),
               style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             Text(

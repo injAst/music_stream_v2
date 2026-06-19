@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 import '../../core/config/api_config.dart';
 import '../models/playlist.dart';
 import '../models/track.dart';
@@ -105,27 +104,36 @@ class PlaylistRepository {
   }
 
   Future<String> uploadArtwork(Uint8List bytes, String filename) async {
-    final uri = Uri.parse('${ApiConfig.baseUrl}/upload/artwork');
-    final request = http.MultipartRequest('POST', uri)
-      ..headers.addAll(_headers)
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: filename,
-          contentType: MediaType('image', 'jpeg'), // Обобщенно
-        ),
-      );
-
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['url'] as String;
+    // Шаг 1: Получаем presigned URL от сервера
+    final presignRes = await http.get(
+      Uri.parse(
+        '${ApiConfig.baseUrl}/upload/presign'
+        '?filename=${Uri.encodeComponent(filename)}&type=artwork',
+      ),
+      headers: _headers,
+    );
+    if (presignRes.statusCode != 200) {
+      throw Exception('Failed to get presigned URL: ${presignRes.body}');
     }
-    throw Exception('Failed to upload artwork: ${response.body}');
+    final presignData = jsonDecode(presignRes.body) as Map<String, dynamic>;
+    final presignedUrl = presignData['presigned_url'] as String;
+    final publicUrl    = presignData['public_url']    as String;
+    final contentType  = presignData['content_type']  as String? ?? 'image/jpeg';
+
+    // Шаг 2: Загружаем напрямую в S3 (Content-Type совпадает с подписанным)
+    final s3Response = await http.put(
+      Uri.parse(presignedUrl),
+      headers: {'Content-Type': contentType},
+      body: bytes,
+    );
+
+    if (s3Response.statusCode != 200) {
+      throw Exception('Failed to upload artwork to S3: ${s3Response.statusCode}');
+    }
+    return publicUrl;
   }
+
+
 
   Future<void> addTrackToPlaylist(String playlistId, String trackId) async {
     final response = await http.post(

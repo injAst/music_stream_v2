@@ -1,0 +1,20 @@
+# Конфигурация Fly.io для Dart-сервера Pulse Music
+app = 'pulse-music-api'
+primary_region = 'ams'   # Amsterdam — ближайший к СНГ
+
+[build]
+  # Dockerfile находится в текущей директории (server/)
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

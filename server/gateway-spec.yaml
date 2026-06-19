@@ -1,0 +1,78 @@
+openapi: "3.0.0"
+info:
+  title: "Pulse Music API Gateway"
+  version: "1.0.0"
+paths:
+  /{path+}:
+    get:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bba7m7ervsce5bqbi8e1
+        service_account_id: ajepdfe7kp2jjspuk7o3
+      operationId: getAny
+      parameters:
+        - name: path
+          in: path
+          required: false
+          schema:
+            type: string
+    post:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bba7m7ervsce5bqbi8e1
+        service_account_id: ajepdfe7kp2jjspuk7o3
+      operationId: postAny
+      parameters:
+        - name: path
+          in: path
+          required: false
+          schema:
+            type: string
+    put:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bba7m7ervsce5bqbi8e1
+        service_account_id: ajepdfe7kp2jjspuk7o3
+      operationId: putAny
+      parameters:
+        - name: path
+          in: path
+          required: false
+          schema:
+            type: string
+    delete:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bba7m7ervsce5bqbi8e1
+        service_account_id: ajepdfe7kp2jjspuk7o3
+      operationId: deleteAny
+      parameters:
+        - name: path
+          in: path
+          required: false
+          schema:
+            type: string
+    patch:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bba7m7ervsce5bqbi8e1
+        service_account_id: ajepdfe7kp2jjspuk7o3
+      operationId: patchAny
+      parameters:
+        - name: path
+          in: path
+          required: false
+          schema:
+            type: string
+    options:
+      x-yc-apigateway-integration:
+        type: serverless_containers
+        container_id: bba7m7ervsce5bqbi8e1
+        service_account_id: ajepdfe7kp2jjspuk7o3
+      operationId: optionsAny
+      parameters:
+        - name: path
+          in: path
+          required: false
+          schema:
+            type: string
